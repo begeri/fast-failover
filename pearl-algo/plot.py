@@ -65,7 +65,7 @@ def draw_graph_with_labels(graph, output_tex_file):
     print(f"Graph saved to {output_tex_file}")
 
 
-def draw_multigraph_with_labels(graph, output_tex_file):
+def draw_multigraph_with_labels(graph, output_tex_file = None):
     """
     Draws a MultiGraph using matplotlib, including parallel edges, 
     colors nodes based on their labels, and exports the figure to a .tex file.
@@ -118,7 +118,8 @@ def draw_multigraph_with_labels(graph, output_tex_file):
     ax.autoscale_view()
 
     # Save the plot to a .tex file using tikzplotlib
-    tikzplotlib.save(output_tex_file)
-    print(f"MultiGraph saved to {output_tex_file}")
+    if output_tex_file is not None:
+        tikzplotlib.save(output_tex_file)
+        print(f"MultiGraph saved to {output_tex_file}")
 
 

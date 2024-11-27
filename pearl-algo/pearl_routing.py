@@ -5,6 +5,7 @@ import networkx as nx
 import argparse
 from graph_analise import find_pearls, neighbor_of_subgraph
 from graph_analise import cut_cutting_edges, is_3_connected, read_in_graph
+from graph_analise import *
 from graph_gen import add_ear
 
 from heapq import heappush, heappop
@@ -18,13 +19,68 @@ random.seed(42)
 ### UTILS
 #(at least what is not imported from graph_analise)
 
+#
+def cutting_nodes(G):
+    if len(list(nx.connected_components(G)))!=1:
+        print('not connected graph')
+        return []
+    
+    cuts = []
+    for node in G.nodes:
+        test_graph = G.copy()
+        test_graph.remove_node(node)
+        if len(list(nx.connected_components(test_graph)))>1:
+            cuts.append(node)
+    return cuts
+
+
 #TODO
-def separate_by_cuttin_nodes(G):
-    cuts = nx.all_node_cuts(G)
+# create the 2-node-connected subgraphs of a graph 
+def separate_by_cutting_nodes(G):
+    '''
+    A recursive algorithm to compute the 2-node-connected subgraphs of a graph
 
-    #check if min_cut size == 1
+    INPUT:
+    G is a nx.MultiGraph with a G.graph['root'] property
 
-    #TODO
+    OUTPUT:
+    a list of 2-node-connected graphs, that are a partition of E(G), each graph is a nx.MultiGraph
+    '''
+    root = G.graph['root']
+    cuts = list(cutting_nodes(G))
+    graph_pieces = G.copy()
+
+    list_of_2_node_conn_comps = []
+
+    # if we are 2-node-connected, return the whole graph 
+    if cuts==[]:
+        return [G]
+
+    #if we are not, recursion by one of the cutting nodes
+    curr_cutting_node = cuts[0]
+    graph_pieces.remove_node(curr_cutting_node)
+    comps = nx.connected_components(graph_pieces)
+
+    list(G.neighbors(curr_cutting_node))
+    for comp in comps:
+        smaller_graph = G.subgraph([curr_cutting_node, *comp]).copy()
+        #if root is not in the smaller comp
+        if G.graph['root'] not in comp:
+            lista = list(comp)
+            if type(G.graph['root']) == 'str':
+                lista.sort(key = lambda node: len(nx.shortest_path(G, str(source=G.graph['root']), target=str(node))))
+            else: 
+                lista.sort(key = lambda node: len(nx.shortest_path(G, source=G.graph['root'], target=node)))
+            closest_node = lista[0]
+            smaller_graph.graph['root'] = closest_node
+        
+        # recursively compute all the 2-node-connected components
+        list_of_2_conn_comps_of_this_comp = separate_by_cutting_nodes(smaller_graph)
+        for result_comp in list_of_2_conn_comps_of_this_comp:
+            list_of_2_node_conn_comps.append(result_comp)
+    
+
+    return list_of_2_node_conn_comps
 
 
 
@@ -292,20 +348,24 @@ def pearl_depth_of_graph(simple_graph, verbose = False):
     trimmed_graph = contract_paths_keep_root(trimmed_graph)
 
     #dissect into 2-connected components
-    comps = cut_cutting_edges(trimmed_graph)
+    #comps = cut_cutting_edges(trimmed_graph)
+    comps = separate_by_cutting_nodes(trimmed_graph)
     #discard single nodes
-    proper_comps = [comp for comp in comps if len(comp)>1]
+    proper_comps = [comp for comp in comps if len(comp.nodes)>2]
     if proper_comps == []:             #if every 2 connected component is a single node, then it is a tree
         return 1, 0
     depth_list = []
 
+    if verbose:
+        print('We have proper comps')
     #measure each component
     for comp in proper_comps:
+        if verbose:
+            print('Examining', comp)
         #get the graph structure we need
         graph = trimmed_graph.subgraph(comp).copy()
         #discard degree 2 nodes, so found pearls are not littered by them
         graph = contract_paths_keep_root(graph)
-
         #if the original root is not in the component, then it is the closest one to the root
         if Graph.graph['root'] not in comp:
             #we need to find the unique closest node to the root
@@ -313,7 +373,7 @@ def pearl_depth_of_graph(simple_graph, verbose = False):
             #print('Graph nodes: ', Graph.nodes)
             #print(len(nx.shortest_path(Graph, source='7', target='0')))
             lista = list(comp)
-            lista.sort(key= lambda node: len(nx.shortest_path(Graph, source=str(Graph.graph['root']), target=str(node))))
+            lista.sort(key = lambda node: len(nx.shortest_path(Graph, source=str(Graph.graph['root']), target=str(node))))
             closest_node = lista[0]
             graph.graph['root'] = closest_node
 
@@ -573,7 +633,7 @@ def pearl_based_routing(g):
 #iterate through topology zoo and write node num, edge num, pearl num and pearl depth
 def pearl_depth_experiment():
     graph_data = check_everything()
-    graph_data.to_csv(path_or_buf='/mnt/d/Egyetem/Routing Cikk/fast-failover/pearl-algo/topology_zoo_statistics.csv')
+    graph_data.to_csv(path_or_buf='/mnt/d/Egyetem/Routing Cikk/fast-failover/pearl-algo/topology_zoo_statistics_test.csv')
 
 
 ### RUNNING STUFF ########################################################################################
@@ -586,21 +646,23 @@ def main(args):
 
 def main_2(args):
 
-    #graph = nx.MultiGraph(nx.cycle_graph(n=4))
-    #graph = nx.MultiGraph(nx.complete_graph(n=4))
-    graph = create_simple_2_pearl_graph()
-    graph.graph['k'] = 3
-    graph.graph['root'] = 0
+    file_path='/mnt/d/Egyetem/Routing Cikk/SyPeR/topology-zoo-original/Aarnet.graphml'
+    G, is_list = read_in_graph(file_path)
+    pearl_depth_of_graph(G, verbose=True)
 
-    print(graph.edges)
 
-    pearl_depth, newest_pearl_index, multi_graph, list_of_all_pearls = partition_2_conn_into_pearls(graph)
-    print(pearl_depth, newest_pearl_index)
     
 
-    digraph = graph.to_directed()
-    pearl = list_of_all_pearls[0][0]
-    route_a_pearl_for_traversing(pearl, None, graph)
+def main_2(args):
+    file_path='/mnt/d/Egyetem/Routing Cikk/SyPeR/topology-zoo-original/Aarnet.graphml'
+    G, is_list = read_in_graph(file_path)
+
+    Graph = nx.MultiGraph(G)
+    Graph.graph['root'] = random.choice(list(Graph.nodes))
+    Graph = contract_paths_keep_root(Graph)
+
+    print(separate_by_cutting_nodes(Graph))
+
 
     
 
