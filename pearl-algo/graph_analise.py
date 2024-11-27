@@ -227,20 +227,20 @@ def repeat_contracts(multi_graph, verbose= False):
 
     return number_of_contracts
 
-def measure_graph(file_path, verbose=False):
-    #read in graph 
-    Graph, is_list = read_in_graph(file_path)
-    #print(graph)
-
+def measure_graph(simple_graph, verbose=False):
+    '''
+    INPUT:
+    simple_graph = nx.Graph, the graph to measure
+    '''
     #dissect into 2-connected components
-    comps = cut_cutting_edges(Graph)
+    comps = cut_cutting_edges(simple_graph)
     #discard single nodes
     proper_comps = [comp for comp in comps if len(comp)>1]
 
     max_depth = 0
     #measure each component
     for comp in proper_comps:
-        graph = Graph.subgraph(comp).copy()
+        graph = simple_graph.subgraph(comp).copy()
         #create multi-graph, so connectedness is not lost    
         multi_graph = nx.MultiGraph(graph)
         depth_of_comp = repeat_contracts(multi_graph, verbose)
@@ -257,8 +257,9 @@ def measure_everything():
     depth = 0
     for name in fnames:
         try:
-            print(name) 
-            this_depth = measure_graph(name)
+            print(name)
+            Graph, is_list = read_in_graph(file_path) 
+            this_depth = measure_graph(Graph)
             print(this_depth)
             if this_depth>=depth:
                 deepest = name
@@ -270,7 +271,8 @@ def measure_everything():
     return deepest, depth
 
 def main(args):
-    #print(measure_graph(args.file_path, verbose=False))
+    Graph, is_list = read_in_graph(file_path)
+    #print(measure_graph(Graph, verbose=False))
     print(measure_everything())
 
     #graph = nx.MultiGraph(nx.cycle_graph(5))
