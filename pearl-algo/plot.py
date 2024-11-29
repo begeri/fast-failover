@@ -35,7 +35,30 @@ def plot_columns_by_index(dataframe, col1, col2, col3, col4, output_file="topolo
 
     plt.show()
 
-    import networkx as nx
+def plot_columns_by_an_other_column(dataframe, col_x, col1, col2, col3, output_file="topology_zoo_pearl_data.tex"):
+    '''
+    Given a dataframe, 
+    '''
+    # Sort the DataFrame by col1
+    sorted_df = dataframe.sort_values(by=col1).reset_index(drop=True)
+
+    # Plot the data
+    plt.figure(figsize=(10, 6))
+    plt.scatter(sorted_df[col_x], sorted_df[col1], label=col1, color='b', s=5)
+    plt.scatter(sorted_df[col_x], sorted_df[col2], label=col2, color='r', s=5)
+    plt.scatter(sorted_df[col_x], sorted_df[col3], label=col3, color='y', s=5)
+    
+    plt.xlabel('Index')
+    plt.ylabel('Values')
+    plt.title(f'{col1}, {col2}, {col3} vs {col_x}')
+    plt.legend()
+    plt.grid()
+
+    # Export the plot to a TikZ file
+    tikzplotlib.save(output_file)
+
+    plt.show()
+    
 
 
 def draw_graph_with_labels(graph, output_tex_file):

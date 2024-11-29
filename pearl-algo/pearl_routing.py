@@ -171,6 +171,7 @@ def contract_paths_keep_root(G):
 
     #if the root is of degree 2, doubling the edges means, that we get a routing, that first tries to reach d
     #in one of the edges and then on the other.
+   
     if G.graph['root'] in nodes_to_remove:
         nodes_to_remove.remove(G.graph['root'])
         neighbors = list(G.neighbors(G.graph['root']))
@@ -194,6 +195,7 @@ def leaf_pearls(multi_graph, level='unknown'):
     PEARL[i]['nodes'] - list of nodes for pearl i
     PEARL[i]['cut_edges'] - the two edges defining pearl i
     PEARL[i]['boundary] - the two nodes being the boundary of pearl i
+    PEARL[i]['neighbor_nodes'] = neighbors
     '''
 
     pearls = find_pearls(multi_graph)
@@ -269,8 +271,9 @@ def partition_2_conn_into_pearls(multi_graph):
     newest_pearl_index = -1
     while is_3_connected(remaining_graph) == False:
         #there are still leaves!
-        #print('pearl level is ', current_pearl_level)
+        #print('Ezt nézed')
         #print(remaining_graph.edges)
+        #print(remaining_graph.graph['root'])
         current_level_pearls = leaf_pearls(remaining_graph, level=current_pearl_level)
         root_pearl = None
 
@@ -285,7 +288,10 @@ def partition_2_conn_into_pearls(multi_graph):
                 for node in pearl['nodes']:
                     multi_graph.nodes[node]['pearl_id'] = pearl['id']
                 #remove the pearl
-                remaining_graph = totally_contract_pearl(remaining_graph, pearl['nodes'])    
+                remaining_graph = totally_contract_pearl(remaining_graph, pearl['nodes'])
+        #if is_3_connected(remaining_graph): 
+                
+
             
         if root_pearl != None: current_level_pearls.remove(root_pearl)
 
@@ -319,9 +325,11 @@ def partition_2_conn_into_pearls(multi_graph):
 
     for level_list in list_of_all_pearls:
         for pearl in level_list:
-            for neighbor in pearl['neighbor_nodes']:
-                if pearl['neighbor_nodes'] != 'this is the root':
-                    pearl['parent_pearl'] = multi_graph.nodes[neighbor]['pearl_id']
+            if pearl['neighbor_nodes'] != 'this is the root':
+                for neighbor in pearl['neighbor_nodes']:
+                    id_s = [multi_graph.nodes[neighbor]['pearl_id'] for neighbor in pearl['neighbor_nodes'] ]
+                max(id_s)
+                pearl['parent_pearl'] = max(id_s)
 
     num_pearls = newest_pearl_index+1
     return current_pearl_level, num_pearls, multi_graph, list_of_all_pearls
@@ -333,12 +341,9 @@ def pearl_depth_of_graph(simple_graph, verbose = False):
     if 'root' not in Graph.graph.keys():                       #if not specified earlier, choose a random root
         Graph.graph['root'] = random.choice(list(Graph.nodes))
 
-    #for debugging purposes:
-    #Graph.graph['root'] = 7
+    #print('Original root', Graph.graph['root'])
 
-    if verbose:
-        print(Graph.nodes)
-        print('root = ', Graph.graph['root'], ' is degree ', nx.degree(Graph, '7') )
+    if verbose: 
         print('and the edges are')
         print(Graph.edges)
 
@@ -346,6 +351,7 @@ def pearl_depth_of_graph(simple_graph, verbose = False):
     #discard degree 2 nodes, so found pearls are not littered by them
     trimmed_graph = Graph.copy()
     trimmed_graph = contract_paths_keep_root(trimmed_graph)
+    #print('Trimmed graph nodes', trimmed_graph.nodes)
 
     #dissect into 2-connected components
     #comps = cut_cutting_edges(trimmed_graph)
@@ -353,35 +359,43 @@ def pearl_depth_of_graph(simple_graph, verbose = False):
     #discard single nodes
     proper_comps = [comp for comp in comps if len(comp.nodes)>2]
     if proper_comps == []:             #if every 2 connected component is a single node, then it is a tree
-        return 1, 0
+        return 1, 0, []
     depth_list = []
 
     if verbose:
         print('We have proper comps')
     #measure each component
     for comp in proper_comps:
-        if verbose:
-            print('Examining', comp)
+        #if verbose:
+        #print('Examining', comp.nodes)
         #get the graph structure we need
         graph = trimmed_graph.subgraph(comp).copy()
-        #discard degree 2 nodes, so found pearls are not littered by them
-        graph = contract_paths_keep_root(graph)
+        #print(graph.graph['root'])
         #if the original root is not in the component, then it is the closest one to the root
         if Graph.graph['root'] not in comp:
             #we need to find the unique closest node to the root
-            
+
             #print('Graph nodes: ', Graph.nodes)
-            #print(len(nx.shortest_path(Graph, source='7', target='0')))
             lista = list(comp)
             lista.sort(key = lambda node: len(nx.shortest_path(Graph, source=str(Graph.graph['root']), target=str(node))))
             closest_node = lista[0]
             graph.graph['root'] = closest_node
+            #print('Original one', Graph.graph['root'], 'closest node', closest_node )
+        
+        #discard degree 2 nodes, so found pearls are not littered by them
+        #if this is before finding the new root, that can make problems
+        graph = contract_paths_keep_root(graph)
 
         #Check those pearls
+        #print('3as jel')
+        #print(graph.nodes)
         depth, num_pearls, graph_with_pearl_data, list_of_all_pearls = partition_2_conn_into_pearls(graph)
-        depth_list.append(depth)
+        pearl_depth = nx.diameter(extract_pearl_tree(graph))+1
+        #print(depth, pearl_depth)
+        
+        depth_list.append(pearl_depth)
 
-    return max(depth_list), num_pearls
+    return max(depth_list), num_pearls, list_of_all_pearls
 
 
 ### MEASUREMENTS
@@ -391,15 +405,46 @@ def check_a_graph(file_path, verbose = False):
     '''
     prints and returns different graph properties
     '''
+    #pearl relatd infos
     G, is_list = read_in_graph(file_path)
-    pearl_depth, num_pearls = pearl_depth_of_graph(G, verbose=False)
+    pearl_depth, num_pearls, pearl_list = pearl_depth_of_graph(G, verbose=False)
 
+    # compute the average pearl size, min size, max size
+    pearl_size_list = []
+    min_pearl_size = -200
+    max_pearl_size = -200
+    if pearl_list != []:
+        for level in pearl_list:
+            for pearl in level:
+                curr_size = len(list(pearl['nodes']))
+                pearl_size_list.append(curr_size)
+                #updating the min, max
+                if min_pearl_size < 0:         min_pearl_size = curr_size
+                if min_pearl_size > curr_size: min_pearl_size = curr_size
+                if max_pearl_size < curr_size: max_pearl_size = curr_size
+        avg_pearl_size = sum(pearl_size_list)/len(pearl_size_list)
+    else:
+        min_pearl_size = 0
+        max_pearl_size = 0
+        avg_pearl_size = 0
     
+    #get basic infos
     Graph = nx.MultiGraph(G)
     node_num = len(Graph.nodes)
     edge_num = len(Graph.edges)
-    print('node num = ', node_num, ', edge num =', edge_num, ', pearl depth = ', pearl_depth,' num pearls = ', num_pearls,', at ', file_path)
-    return pearl_depth, node_num, edge_num, num_pearls
+
+    #check if subdivision graph
+    is_subdivision = False
+    if pearl_depth == 1:
+        for node in G.nodes:
+            if G.degree(node) == 2:
+                is_subdivision = True
+
+
+    if verbose:
+        print('node num = ', node_num, ', edge num =', edge_num, ', pearl depth = ', pearl_depth,' num pearls = ', num_pearls,', at ', file_path)
+        print('average pearl size = ', avg_pearl_size, 'min = ', min_pearl_size, 'max = ', max_pearl_size)
+    return pearl_depth, node_num, edge_num, num_pearls, avg_pearl_size, min_pearl_size, max_pearl_size, is_subdivision
 
 def check_everything():
 
@@ -407,27 +452,33 @@ def check_everything():
     fnames = filter(lambda f: nx.edge_connectivity(nx.read_graphml(f))>0,fnames)
 
     graph_data = pd.DataFrame(columns=['NUM NODES', 'NUM EDGES', 'PEARL DEPTH', 'GRAPH NAME', 'NUM PEARLS'])
+    subdivison_graphs_data = pd.DataFrame(columns=['NUM NODES', 'NUM EDGES', 'PEARL DEPTH', 'GRAPH NAME', 'NUM PEARLS'])
     print(graph_data)
     index_of_graph = 0
     deepest = ''
     depth = 0
     for name in fnames:
-        #try:
         print(name) 
         end_of_name = name.split(sep = '/')[-1]
-        this_depth, node_num, edge_num, num_pearls = check_a_graph(name)
+        #getting the data
+        this_depth, node_num, edge_num, num_pearls, avg_pearl_size, min_pearl_size, max_pearl_size, is_subdivision = check_a_graph(name)
         print(this_depth)
-        this_data = pd.DataFrame( index=[index_of_graph], data =  {'NUM NODES': node_num, 'NUM EDGES': edge_num, 'PEARL DEPTH': this_depth, 'GRAPH NAME':end_of_name, 'NUM PEARLS': num_pearls})
+        #converting the data to dataframe
+        this_data = pd.DataFrame( index=[index_of_graph], data =  {'NUM NODES': node_num, 'NUM EDGES': edge_num, 'PEARL DEPTH': this_depth, 'GRAPH NAME':end_of_name, 'NUM PEARLS': num_pearls, 'AVG PEARL SIZE': avg_pearl_size, 'MIN PEARL SIZE': min_pearl_size, 'MAX PEARL SIZE': max_pearl_size})
         graph_data = pd.concat([graph_data, this_data], axis=0)
         if this_depth>=depth:
             deepest = name
-            depth = this_depth        
-        #except:
-        #    print('baj ', name)
+            depth = this_depth 
+
+        #listing the subdivision graphs
+        if is_subdivision:
+            subdivison_graphs_data = pd.concat([subdivison_graphs_data, this_data], axis=0)
+
+        #next graph
         index_of_graph+=1
     print( deepest, depth)
 
-    return graph_data
+    return graph_data, subdivison_graphs_data
 
 #reads in a graph and for each possible choice of root computes the pearl depth 
 def analyze_a_graph(file_path):
@@ -438,7 +489,7 @@ def analyze_a_graph(file_path):
 
     for node in G.nodes:
         G.graph['root'] = node
-        pearl_depth, num_pearls = pearl_depth_of_graph(G, verbose=False)
+        pearl_depth, num_pearls, pearl_list = pearl_depth_of_graph(G, verbose=False)
         print(pearl_depth)
 
     
@@ -458,14 +509,17 @@ def extract_pearl_tree(multi_graph):
     current_pearl_level, newest_pearl_index, multi_graph, list_of_all_pearls = partition_2_conn_into_pearls(multi_graph)
     pearl_tree = nx.Graph()
     for level in reversed( list_of_all_pearls):
-        print('Új szint')
         for pearl in level:
-            print(pearl)
             pearl_tree.add_node(pearl['id'])
             pearl_tree.nodes[pearl['id']]['pearl_data'] = pearl
             if pearl['parent_pearl'] != 'this is the root':
                 pearl_tree.add_edge(pearl['id'], pearl['parent_pearl'])
 
+    #print('List of all pearls')
+    #print(list_of_all_pearls)
+    print("Tree edges, info")
+    print(pearl_tree.edges)
+    print(list(nx.connected_components(pearl_tree)))
     return pearl_tree
 
 
@@ -474,16 +528,65 @@ def extract_pearl_tree(multi_graph):
 
 ##ROUTING
 
+#TODO
+# routes a general graph
+def route_a_multigraph(multigraph):
+    '''
+    todo
+    '''
+    #
+
+    # partition into 2-connected components
+    # list the connections
+    
+    # route each component
+
+    # route the connections of the connected components
+    return 0
+
+#TODO
+# routes a 2-connected graph
+def route_a_2_conn_multigraph(multigraph):
+    '''
+    Partition the edges of a 
+    '''
+    # for testing the code working:
+    # list the edges to check if the are routed. 
+
+    # partition the edges of multigraph into pearls
+
+    # starting from backwards, route the pearls backwards
+      # route the pearl for basic getting out
+      # route the pearl for traversing
+      # insert it into the previous routing
+        # find the edge, that was replacing it
+        # modify the neighbor nodes, the previous replacing edge now is the cutting edges 
+
+    return 0
+
+#TODO
+#routing of closed_pearls   #rout_3_conn_graph() + route_a_pearl_for_traversing
+def route_a_pearl(P):
+    '''
+    Given a pearl, with boundaries, etc, it generates a arborescense based routing with rout_3_conn_graph(), and 
+    route_a_pearl_for_traversing
+    '''
+    # add boundary_1, boundary_2 as an edge
+
+    # route the pearl with rout_3_conn_graph
+
+    # route the pearl for traversing 
+
+#TODO: bouncing bit!
 #routing of 3-connected graphs via arborescences
-def rout_3_conn_graph(g, edge):
+def rout_3_conn_graph(multigraph, multidigraph, edge):
     '''
     given a 3 connected graph, that has an extra attribute, g.graph['root'] and a specific 'edge', make a 2 resilient routing based on
     circular arborescences, where the first arborescence contains 'edge'
     '''
-    g = g.to_directed()
 
     #find the arborescences
-    unordered_arborescence_list = GreedyArborescenceDecomposition(g)
+    unordered_arborescence_list = GreedyArborescenceDecomposition(multidigraph)
     arborescence_list = []
     last_arb = None
     for arb in unordered_arborescence_list:
@@ -495,12 +598,13 @@ def rout_3_conn_graph(g, edge):
     arborescence_list.append(last_arb)
     
 
-    for node in g.nodes:
-        if node is not g.graph['root']:
-
+    for node in multidigraph.nodes:
+        if node is not multidigraph.graph['root']:
             R = {}
-            for edge in g.in_edges(nbunch= [node], keys=True):
-                #this is  ugly. todo: do it nicer.
+            # if you started under this pearl, you need to get out of here
+            R_getting_out = {}
+            for edge in multidigraph.in_edges(nbunch= [node], keys=True):
+                # reindexing the arborescences
                 if edge in arborescence_list[0].edges:
                     tree_index = 0
                 elif edge in arborescence_list[1].edges:
@@ -521,29 +625,26 @@ def rout_3_conn_graph(g, edge):
                     out_edge_1 = list(curr_tree.out_edges([node], keys = True))[0]
                     out_edge_2 = list(next_tree.out_edges([node], keys = True))[0]
                     out_edge_3 = list(prev_tree.out_edges([node], keys = True))[0]
-                    R[edge] = [out_edge_1, out_edge_2, out_edge_3]
-            g.nodes[node]['R'] = R
+                    R_getting_out[edge] = [out_edge_1, out_edge_2, out_edge_3]
+            #if the package starts at 'node'
+            arb_0_edges_list = list(arborescence_list[0].edges)
+            arb_1_edges_list = list(arborescence_list[1].edges)
+            arb_2_edges_list = list(arborescence_list[2].edges)
+            out_edge_in_arb_0 = [edge for edge in arb_0_edges_list if (edge[0]==node)][0]
+            out_edge_in_arb_1 = [edge for edge in arb_1_edges_list if (edge[0]==node)][0]
+            out_edge_in_arb_2 = [edge for edge in arb_2_edges_list if (edge[0]==node)][0]
+            R_getting_out['start'] = [out_edge_in_arb_0, out_edge_in_arb_1, out_edge_in_arb_2]
+
+            #saving the local dict to the big dict
+            R['getting_out'] = R_getting_out
+            multidigraph.nodes[node]['R'] = R
         
-    for node in g.nodes:
-        if node is not g.graph['root']:
-            print(g.nodes[node]['R'])
+    for node in multidigraph.nodes:
+        if node is not multidigraph.graph['root']:
+            print(multidigraph.nodes[node]['R'])
 
 
-#TODO
-#routing of closed_pearls   #might be the same as rout_3_conn_graph()
-def route_a_pearl(P, boundary_1, boundary_2):
-    '''
-    Given a pearl, with boundaries, etc, it generates a arborescense based routing with rout_3_conn_graph(), and 
-    finds 2 parallel paths and makes the traversing routing as well.
-    '''
-    # route the pearl with the new edge
-
-    # 
-
-
-    
-
-#TODO
+#TODO: bouncing bit! (here we actually need to think about it)
 #routing of parallel routes in a graph
 def route_a_pearl_for_traversing(P, multidigraph, multigraph):
     '''
@@ -555,7 +656,7 @@ def route_a_pearl_for_traversing(P, multidigraph, multigraph):
     multidigraph   - multidigraph, thats edges will be used for partitioning
     '''
     # find the boundaries
-    if len(P['boundary'])==1:
+    if len(P['boundary'])==1:                          # if we are only using 2-edge-connectivity, this is needed
         return 'Nope, we do not traverse this'
     else:
         boundary_1 = P['boundary'][0]
@@ -566,32 +667,120 @@ def route_a_pearl_for_traversing(P, multidigraph, multigraph):
 
     # find 2 arc-disjointed pathes
     paths = list(nx.edge_disjoint_paths(pearl_graph, boundary_1, boundary_2, cutoff=2))
-    print(paths)
+    path_1 = paths[0]
+    path_2 = paths[1]
+    # create the 2-path-graph 
+    path_graph_1 = pearl_graph.subgraph(path_1).copy()
+    path_graph_2 = pearl_graph.subgraph(path_2).copy()
+    parallel_path_graph = path_graph_1.copy()
+    for node in path_graph_2:
+        if node not in parallel_path_graph.nodes: parallel_path_graph.add_node(node)
+    for edge in path_graph_2.edges(keys=True): 
+        if edge not in parallel_path_graph.edges(keys=True): parallel_path_graph.add_edge(*edge, keys=True)
+    parallel_path_graph = parallel_path_graph.to_directed()
+
     
-    # route_degree_2_node for the inner ones
+    # route_degree_2_node_for_traversing for the inner ones
+    for node in path_1[1:-1]:
+        route_degree_2_node_for_traversing(parallel_path_graph, node)
+    for node in path_2[1:-1]:
+        route_degree_2_node_for_traversing(parallel_path_graph, node)
+    
+   
+    
 
-    # route the boundaries 
+    # route the boundaries
+    all_edges_list = list(multidigraph.edges)
 
-#routing of degree 2 nodes
-def route_degree_2_node(multidigraph, node):
+    # path_1 goes primarily from path_1[0] to path_1[-1] (boundary_1 -> boundary_2)
+    # path_2 goes primarily from path_1[-1] to path_1[0] (boundary_2 -> boundary_1)
+    # need the 3 edges from boundaries, 3rd is in P['cut_edges']
+
+    #choosing the appropriate in and out edges
+    #boundary_1
+    out_cut_edge_1    =  [edge for edge in all_edges_list if (edge[0]==boundary_1 and (edge[1] in P['neighbor_nodes']))][0]
+    in_cut_edge_1     =  [edge for edge in all_edges_list if (edge[1]==boundary_1 and (edge[0] in P['neighbor_nodes']))][0]
+    p1_out_edge_1     =  [edge for edge in all_edges_list if (edge[0]==boundary_1 and (edge[1] in path_1))][0]
+    p1_in_edge_1      =  [edge for edge in all_edges_list if (edge[1]==boundary_1 and (edge[0] in path_1))][0]
+    p2_out_edge_1     =  [edge for edge in all_edges_list if (edge[0]==boundary_1 and (edge[1] in path_2))][0]
+    p2_in_edge_1      =  [edge for edge in all_edges_list if (edge[1]==boundary_1 and (edge[0] in path_2))][0]
+    #boundary_2
+    out_cut_edge_2    =  [edge for edge in all_edges_list if (edge[0]==boundary_2 and (edge[1] in P['neighbor_nodes']))][0]
+    in_cut_edge_2     =  [edge for edge in all_edges_list if (edge[1]==boundary_2 and (edge[0] in P['neighbor_nodes']))][0]
+    p1_out_edge_2     =  [edge for edge in all_edges_list if (edge[0]==boundary_2 and (edge[1] in path_1))][0]
+    p1_in_edge_2      =  [edge for edge in all_edges_list if (edge[1]==boundary_2 and (edge[0] in path_1))][0]
+    p2_out_edge_2     =  [edge for edge in all_edges_list if (edge[0]==boundary_2 and (edge[1] in path_2))][0]
+    p2_in_edge_2      =  [edge for edge in all_edges_list if (edge[1]==boundary_2 and (edge[0] in path_2))][0]
+
+   
+    #creating dicts for boundary_1
+    R_1 = {}                            # routing table for boundary_1 
+    R1_traversing_dict = {} 
+
+    R1_traversing_dict[in_cut_edge_1]    = [p1_out_edge_1, p2_out_edge_1, out_cut_edge_1]
+    R1_traversing_dict[p1_in_edge_1] = [p2_out_edge_1, out_cut_edge_1, p1_out_edge_1]
+    R1_traversing_dict[p2_in_edge_1] = [out_cut_edge_1, p1_out_edge_1, p2_out_edge_1]
+    R_1['traversing'] = R1_traversing_dict
+
+    #creating dicts for boundary_2
+    R_2 = {}
+    R2_traversing_dict = {} 
+    R2_traversing_dict[in_cut_edge_2]    = [p2_out_edge_2, p1_out_edge_2, out_cut_edge_2]
+    R2_traversing_dict[p2_in_edge_2] = [p1_out_edge_2, out_cut_edge_2, p2_out_edge_2]
+    R2_traversing_dict[p1_in_edge_2] = [out_cut_edge_2, p2_out_edge_2, p1_out_edge_2]
+    R_2['traversing'] = R2_traversing_dict
+
+    # saving the dicts
+    #if we already stored data previously, just add some new keys
+    if 'R' not in parallel_path_graph.nodes[boundary_1].keys():
+        parallel_path_graph.nodes[boundary_1]['R'] = R_1
+    else: 
+        parallel_path_graph.nodes[boundary_1]['R']['traversing'] = R1_traversing_dict
+    
+    if 'R' not in parallel_path_graph.nodes[boundary_2].keys():
+        parallel_path_graph.nodes[boundary_2]['R'] = R_2
+    else: 
+        parallel_path_graph.nodes[boundary_2]['R']['traversing'] = R2_traversing_dict
+    
+
+    
+    print('parallel path node data')
+    for node in parallel_path_graph:
+        print(node)
+        multidigraph.nodes[node]['R'] = parallel_path_graph.nodes[node]['R']
+        print(multidigraph.nodes[node])
+    
+
+#routing of degree 2 nodes, if we are traversing
+def route_degree_2_node_for_traversing(multidigraph, node):
     '''
-    It just forwards always, if possible.
+    It just forwards, if possible.
     '''
-    print(node)
     R = {}
+    dict_for_traversing = {}
     for in_edge in multidigraph.in_edges(node, keys=True):
         out_edge_list = list(multidigraph.out_edges(node, keys=True) )
-        if out_edge_list[0][1] == in_edge[0]:                       # just lists the nodes, decides which out_edge
-            R[in_edge] = [out_edge_list[1],out_edge_list[0]]        # goes forward, and puts that to first, 
-        else:                                                       # the other one second
-            R[in_edge] = [out_edge_list[0],out_edge_list[1]]
+        if out_edge_list[0][1] == in_edge[0]:                                    # just lists the nodes, decides which out_edge
+            dict_for_traversing[in_edge] = [out_edge_list[1],out_edge_list[0]]   # goes forward, and puts that to first, the other one second
+        else:                                                                   
+            dict_for_traversing[in_edge] = [out_edge_list[0],out_edge_list[1]]
+    
+    R['traversing'] = dict_for_traversing 
+
+    if 'R' not in multidigraph.nodes[node].keys():
+        multidigraph.nodes[node]['R'] = R
+    else: 
+        multidigraph.nodes[node]['R']['traversing'] = dict_for_traversing
+
+    multidigraph.nodes[node]['R'] = R
     
     return None
-         
+
+#TODO: bouncing bit! (here we need to think about it)
+# routing of degree 2 nodes if we are not traversing
+def route_degree_2_node_outside_of_pearl(multidigraph, node):
+    pass       
         
-
-
-
 
 # The header info of a package now can be represented as a dict.
 # 
@@ -629,31 +818,64 @@ def pearl_based_routing(g):
     return g
 
 
+### TESTS, SIMULATIONS
 
-#iterate through topology zoo and write node num, edge num, pearl num and pearl depth
-def pearl_depth_experiment():
-    graph_data = check_everything()
-    graph_data.to_csv(path_or_buf='/mnt/d/Egyetem/Routing Cikk/fast-failover/pearl-algo/topology_zoo_statistics_test.csv')
+#TODO
+def compute_primary_path():
+    pass
 
+#TODO
+def compute_path_under_1_fail():
+    pass
+
+#TODO
+def compute_path_under_2_fails():
+    pass
+
+#TODO
+# simple failure experiments, path lengths, etc.
+# running time experiments
+# 3 failure experiments
+# are there subdivision graphs, if yes, how many
 
 ### RUNNING STUFF ########################################################################################
 ##########################################################################################################
 ##########################################################################################################
 ##########################################################################################################
 
+def main_routing(args):
+    multigraph = create_simple_2_pearl_multigraph()
+    current_pearl_level, num_pearls, multi_graph, list_of_all_pearls = partition_2_conn_into_pearls(multigraph)
+
+    multidigraph = multigraph.to_directed()
+    print(list_of_all_pearls[0][0])
+    #want to test this
+    #route_a_pearl_for_traversing(list_of_all_pearls[0][0], multidigraph, multigraph)
+    graph = nx.MultiDiGraph(nx.complete_graph(n=4))
+    graph.graph['k'] = 3
+    graph.graph['root'] = 0
+    multidigraph = graph.to_directed()
+    rout_3_conn_graph(graph, multidigraph, (0,1,0))
+
+    '''
+    print('Result')
+    for node in multidigraph.nodes:
+        print(node, multidigraph.nodes[node])
+    '''
+        
+#iterate through topology zoo and write node num, edge num, pearl num and pearl depth
+#def pearl_depth_experiment():
 def main(args):
-    pearl_depth_experiment()
+    graph_data, subdivision_data = check_everything()
+    graph_data.to_csv(path_or_buf='/mnt/d/Egyetem/Routing Cikk/fast-failover/pearl-algo/topology_zoo_statistics_with_pearl_sizes.csv')
+    subdivision_data.to_csv(path_or_buf='/mnt/d/Egyetem/Routing Cikk/fast-failover/pearl-algo/topology_zoo_statistics_subdivision_stats.csv')
 
-def main_2(args):
-
-    file_path='/mnt/d/Egyetem/Routing Cikk/SyPeR/topology-zoo-original/Aarnet.graphml'
-    G, is_list = read_in_graph(file_path)
-    pearl_depth_of_graph(G, verbose=True)
+def main_1(args):
+    pearl_depth, node_num, edge_num, num_pearls, avg_pearl_size, min_pearl_size, max_pearl_size, is_subdivision = check_a_graph('/mnt/d/Egyetem/Routing Cikk/SyPeR/topology-zoo-original/York.graphml')  
+    print(pearl_depth, node_num, edge_num, num_pearls)
 
 
-    
-
-def main_2(args):
+def separation_tests(args):
     file_path='/mnt/d/Egyetem/Routing Cikk/SyPeR/topology-zoo-original/Aarnet.graphml'
     G, is_list = read_in_graph(file_path)
 
@@ -667,7 +889,7 @@ def main_2(args):
     
 
 
-def create_simple_2_pearl_graph():
+def create_simple_2_pearl_multigraph():
     # Create a MultiGraph
     G = nx.MultiGraph()
 
