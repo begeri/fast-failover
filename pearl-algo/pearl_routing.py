@@ -103,22 +103,21 @@ def contract_paths_keep_root(G):
 
     If graph has a root property, then keeps it, if it is degree 2, adds an edge
     '''
+    # list of all degree 2 nodes
     nodes_to_remove = [v for v in G.nodes if G.degree(v) == 2]
 
-    #if the root is of degree 2, doubling the edges means, that we get a routing, that first tries to reach d
-    #in one of the edges and then on the other.
+    #if one of the degree 2 nodes is the root, don't remove it
     if 'root' in G.graph.keys(): 
         if G.graph['root'] in nodes_to_remove:
             nodes_to_remove.remove(G.graph['root'])
-            neighbors = list(G.neighbors(G.graph['root']))
-            for neighbor in neighbors:
-                G.add_edge(G.graph['root'], neighbor )
-
+            
+    # remove the ones we want to remove
     for v in nodes_to_remove:
         neighbors = list(G.neighbors(v))
         G.remove_node(v)
         if len(neighbors)==2:
             G.add_edge(neighbors[0], neighbors[1])
+        # preserve connectivity 
         else: G.add_edge(neighbors[0], neighbors[0])
 
     return G
@@ -168,7 +167,7 @@ def leaf_pearls(multi_graph, level='unknown'):
 
     return decorated_pearls
 
-def totally_contract_pearl(multi_graph, comp):
+def totally_contract_pearl(multi_graph, pearl):
     '''
     nomen est omen
     multi_graph - the graph we are working on
@@ -177,12 +176,14 @@ def totally_contract_pearl(multi_graph, comp):
     We replace the pearl with one edge between the neighbors. 
     If there is only one neighbor, we just delete the pearl.
     '''
+    comp = pearl['nodes']
     #contract pearls
     neighbors = list(neighbor_of_subgraph(multi_graph, comp))
     
     multi_graph.remove_nodes_from(comp)
     if len(neighbors)==2:
-        multi_graph.add_edge(neighbors[0],neighbors[1])
+        key = multi_graph.add_edge(neighbors[0],neighbors[1])
+        pearl['substitute_edge'] = (neighbors[0],neighbors[1], key)
  
 
 
@@ -221,7 +222,7 @@ def partition_2_conn_into_pearls(multi_graph):
                 for node in pearl['nodes']:
                     multi_graph.nodes[node]['pearl_id'] = pearl['id']
                 #remove the pearl
-                remaining_graph = totally_contract_pearl(remaining_graph, pearl['nodes'])
+                remaining_graph = totally_contract_pearl(remaining_graph, pearl)
                     
         if root_pearl != None: current_level_pearls.remove(root_pearl)
  
@@ -250,17 +251,34 @@ def partition_2_conn_into_pearls(multi_graph):
 
     list_of_all_pearls.append([root_dict])
 
-    #for most of the pearls now we can set the parent (except root, that doesn't have)
-    for level_list in list_of_all_pearls:
-        for pearl in level_list:
-            if pearl['neighbor_nodes'] != 'this is the root':
-                for neighbor in pearl['neighbor_nodes']:
-                    id_s = [multi_graph.nodes[neighbor]['pearl_id'] for neighbor in pearl['neighbor_nodes'] ]
-                max(id_s)
-                pearl['parent_pearl'] = max(id_s)
+    
+    #creating the simple list, where they are not in levels, so we can iterate through them
+    simple_pearl_list = []
+    for level in list_of_all_pearls:
+        for pearl in level:
+            simple_pearl_list.append(pearl)
+    
+    # from Gomory-Hu type parents to cactus type parents
+    fixing_pearl_parent_pointers(simple_pearl_list, multi_graph)
 
+    print('Debugging')
+    for pearl in simple_pearl_list:
+        print('_________________________________________________')
+        print(pearl)
+    
+    print('Graph data')
+    print('root = ', multi_graph.graph['root'])
+    
     # at this point we have a pearl height, and it is only the same as pearl depth for the root pearl and the max length
     # pathes to leafs
+    #if the parents are good, this gonna solve the problem of pearl levels
+    for pearl in reversed(simple_pearl_list):
+        if pearl['parent_pearl'] != 'this is the root':
+            print('pearl_id', pearl['id'])
+            parent_pearl_id = pearl['parent_pearl']
+            print('parent pearl id = ', parent_pearl_id)
+            pearl['level_of_pearl'] = simple_pearl_list[parent_pearl_id]['level_of_pearl']-1
+
 
     num_pearls = newest_pearl_index+1
     return current_pearl_level, num_pearls, multi_graph, list_of_all_pearls
@@ -268,7 +286,7 @@ def partition_2_conn_into_pearls(multi_graph):
 #measure the pearl depth of a graph        
 def pearl_depth_of_graph(simple_graph, verbose = False):
     #convert to multigraph 
-    Graph = nx.MultiGraph(simple_graph)
+    OriginalGraph = nx.MultiGraph(simple_graph)
 
 
     is_subdivision = False
@@ -277,11 +295,11 @@ def pearl_depth_of_graph(simple_graph, verbose = False):
     # For debugging/understanding print stuff
     if verbose: 
         print('At the beginning the edges are')
-        print(Graph.edges)
+        print(OriginalGraph.edges)
 
 
     #discard degree 2 nodes, so found pearls are not littered by them
-    trimmed_graph = Graph.copy()
+    trimmed_graph = OriginalGraph.copy()
     trimmed_graph = contract_paths_keep_root(trimmed_graph)
 
     #for consistency lets assume, that the root is a degree 3 node:
@@ -297,9 +315,16 @@ def pearl_depth_of_graph(simple_graph, verbose = False):
     #dissect into 2-connected components
     #comps = cut_cutting_edges(trimmed_graph)
     comps = separate_by_cutting_nodes(trimmed_graph)
-    #discard single nodes and single edges
-    proper_comps = [comp for comp in comps if len(comp.nodes)>2]
-    if proper_comps == []:             #if every 2 connected component is a single node, then it is a tree
+    #discard single nodes and single edges and circles
+    proper_comps = []
+    for comp in comps:
+        if len(list(comp.nodes))>2 and len(list(comp.edges))>len(list(comp.nodes)):
+            proper_comps.append(comp)
+
+
+    #proper_comps = [comp for comp in comps if len(comp.nodes)>2] 
+    
+    if proper_comps == []:             #if every 2 connected component is a single node, edge or circle, then it is a cactus
         return 1, 0, [], False
     depth_list = []
     big_graph_num_pearls = 0
@@ -316,7 +341,7 @@ def pearl_depth_of_graph(simple_graph, verbose = False):
         if trimmed_graph.graph['root'] not in comp:
             #we need to find the unique closest node to the root
             lista = list(comp)
-            lista.sort(key = lambda node: len(nx.shortest_path(Graph, source=str(Graph.graph['root']), target=str(node))))
+            lista.sort(key = lambda node: len(nx.shortest_path(OriginalGraph, source=str(trimmed_graph.graph['root']), target=str(node))))
             closest_node = lista[0]
             graph.graph['root'] = closest_node
         
@@ -332,14 +357,20 @@ def pearl_depth_of_graph(simple_graph, verbose = False):
         #if this is before finding the new root, that can make problems
         graph = contract_paths_keep_root(graph)
 
+        # itt lecsekkolni, hogymicsoda
+        # ha 3 öf, akkor van esély, hogy az egész gráf subdivision
+        # 1 csúcsú, akkor eredetileg egy kör volt - nem az igazi. Ezt lehetne korábban is csekkolni
+        #  
+        # ha nem kör és nem 3-öf, akkor rendes komponens. 
+
         #Check those pearls
         depth, num_pearls, graph_with_pearl_data, list_of_pearls_in_this_comp = partition_2_conn_into_pearls(graph)
-        pearl_depth = nx.diameter(extract_pearl_tree(graph))+1
-        print('num nodes according to the tree', len(list(extract_pearl_tree(graph).nodes)))
-        depth_list.append(pearl_depth)
-        list_of_all_pearls.append(list_of_pearls_in_this_comp)
-        print('num pearls in the pearls depth func', num_pearls)
-        big_graph_num_pearls += num_pearls
+        
+        # Bookkeeping of global properties, lists
+        pearl_depth = nx.diameter(extract_pearl_tree(graph))+1  # depth of this comp
+        depth_list.append(pearl_depth)                       
+        list_of_all_pearls.append(list_of_pearls_in_this_comp)  # list of all pearls 
+        big_graph_num_pearls += num_pearls                      # number of all pearls worth keeping tab
 
         #for the subdivision case, we need to have a component, that is exactly 1 deep and has a degree 2 node
         if there_is_degree_2_node and (pearl_depth==1):
@@ -511,11 +542,7 @@ def route_a_pearl(P, multigraph, multidigraph):
     # add boundary_1, boundary_2 as an edge
     boundary_1 = P['boundary'][0]
     boundary_2 = P['boundary'][1]
-    pearl_graph.add_edge(boundary_1, boundary_2)
-    # If we use a specific key, the GreedyArborescences crashes
-    edge_data = pearl_graph[boundary_1][boundary_2]  
-    keys = list(edge_data.keys())  
-    boundary_edge_key = keys[-1] 
+    boundary_edge_key = pearl_graph.add_edge(boundary_1, boundary_2)
     P['boundary_edge_key'] = boundary_edge_key 
 
     # we need to get to one of the edges #here we have a freedom of choice
@@ -775,19 +802,6 @@ def route_degree_2_node_outside_of_pearl(multidigraph, node):
     pass       
         
 
-# The header info of a package now can be represented as a dict.
-# 
-# package_info['bouncing'],
-# package_info['pearl_level'] 
-# package_info['num_steps']
-#
-# A routing table in given node v looks like a multi levelled dict, keys are possible header configs, 
-# items are the routing permutation on the out-edges
-#
-# R['incoming_edge']['in_pearl'] = 
-# R['incoming_edge']['traversing'] = 
-#
-# Now we write it onto the nodes of the graph, so we don't need the R['v']['incoming_edge']['traversing'] notation.
 
 
 
@@ -797,10 +811,6 @@ def pearl_based_routing(g):
     INPUT: 
     g - nx.MultiGraph with a designated root, denoted at g.graph['root']
     '''
-    C = cactus(g)
-
-    pearl_tree = arborescence_of_pearls(C)
-
     #create a list of 3 connected graphs for each node of the pearl_tree
 
     #the remember the parent-edges of deeper pearls, and boundary nodes/edges for the pearls
@@ -848,8 +858,8 @@ def routing_tests():
     route_a_pearl(example_pearl, ex_multigraph, ex_multidigraph)
         
 #iterate through topology zoo and write node num, edge num, pearl num and pearl depth
-def pearl_depth_experiment():
-#def main(args):
+#def pearl_depth_experiment():
+def main(args):
     graph_data, subdivision_data = check_everything()
     graph_data.to_csv(path_or_buf='/mnt/d/Egyetem/Routing Cikk/fast-failover/pearl-algo/topology_zoo_statistics_with_pearl_sizes.csv')
     subdivision_data.to_csv(path_or_buf='/mnt/d/Egyetem/Routing Cikk/fast-failover/pearl-algo/topology_zoo_statistics_subdivision_stats.csv')
@@ -871,34 +881,55 @@ def separation_tests():
 
     print(separate_by_cutting_nodes(Graph))
 
-#def pearl_decomposition_tests():
-def main(args):
-        graph = create_big_2_conn_from_Ion()
-        print(graph)
+def pearl_decomposition_and_cactus():
+#def main(args):
+    graph = create_big_2_conn_from_Ion()
 
-        tree = extract_pearl_tree(graph)
-        print(tree)
+    tree = extract_pearl_tree(graph)
+    print(tree)
+
+    #Check those pearls
+    depth, num_pearls, graph_with_pearl_data, list_of_all_pearls = partition_2_conn_into_pearls(graph)
+    # this should be done with proper pearl depth
+    pearl_depth = nx.diameter(extract_pearl_tree(graph))+1
+
+    #creating the simple list, where they are not in levels, so we can iterate through them
+    print(list_of_all_pearls[0][0])
+    simple_pearl_list = []
+    for level in list_of_all_pearls:
+        for pearl in level:
+            simple_pearl_list.append(pearl)
+
+    
+
+    #creating the simple list, where they are not in levels, so we can iterate through them
+    simple_pearl_list = []
+    for level in list_of_all_pearls:
+        for pearl in level:
+            simple_pearl_list.append(pearl)
+        
+    fixing_pearl_parent_pointers(simple_pearl_list, graph)
+    
+
+    '''
+    #if the parents are good, this gonna solve the problem of pearl levels
+     
+    for pearl in reversed(simple_pearl_list):
+        print('pearl id ',pearl['id'], '-------------------------------------------')
+        if pearl['parent_pearl'] != 'this is the root':
+            parent_pearl_id = pearl['parent_pearl']
+            print('old level of pearl = ', pearl['level_of_pearl']) 
+            print('level of parent = ', simple_pearl_list[parent_pearl_id]['level_of_pearl'])
+            pearl['level_of_pearl'] = simple_pearl_list[parent_pearl_id]['level_of_pearl']-1
+            print('new level of pearl = ',  pearl['level_of_pearl'] )
+    '''
 
 
 
-        #Check those pearls
-        depth, num_pearls, graph_with_pearl_data, list_of_all_pearls = partition_2_conn_into_pearls(graph)
-        pearl_depth = nx.diameter(extract_pearl_tree(graph))+1
 
-        print(list_of_all_pearls[0][0])
-        simple_list = []
-        for level in list_of_all_pearls:
-            for pearl in level:
-                simple_list.append(pearl)
-            
-        for pearl in reversed(simple_list):
-            print('pearl id ',pearl['id'], '-------------------------------------------')
-            if pearl['parent_pearl'] != 'this is the root':
-                parent_pearl_id = pearl['parent_pearl']
-                print('old level of pearl = ', pearl['level_of_pearl']) 
-                print('level of parent = ', simple_list[parent_pearl_id]['level_of_pearl'])
-                pearl['level_of_pearl'] = simple_list[parent_pearl_id]['level_of_pearl']-1
-                print('new level of pearl = ',  pearl['level_of_pearl'] )
+
+    
+                            
 
 
 
@@ -918,6 +949,70 @@ def main(args):
 
 ### UTILS
 #(at least what is not imported from graph_analise)
+
+def fixing_pearl_parent_pointers(simple_pearl_list, graph):
+    '''
+    Given a 2-connected graph and its pearls, where graph has already pearls and pearls have already 
+    levels on them find the parents of each non-root pearl
+    INPUT:
+    graph - nx.MultiGraph
+    simple_pearl_list - list of dictionaries, dictionaries being the pearls
+
+    OUTPUT:
+    simple_pearl_list - updated pearl['parent_pearl'] datas
+    '''
+    #setting the parents well
+    for pearl in reversed(simple_pearl_list):
+        if pearl['parent_pearl']!='this is the root':
+            pearl['parent_pearl'] = 'unknown'
+        
+    #setting the parents well
+    for pearl in reversed(simple_pearl_list):
+        if pearl['neighbor_nodes'] != 'this is the root':
+            neighbor_pearl_ids = []
+            for neighbor in pearl['neighbor_nodes']:
+                neighbor_pearl_ids.append(graph.nodes[neighbor]['pearl_id'])
+            if len(neighbor_pearl_ids)==1:
+                pearl['parent_pearl'] = neighbor_pearl_ids[0]
+            elif neighbor_pearl_ids[0]==neighbor_pearl_ids[1]:    
+                #if the 2 neighbors are the same, that is the parent
+                pearl['parent_pearl'] = neighbor_pearl_ids[0]
+            # if the two neighbors are not the same
+            elif neighbor_pearl_ids[0]!=neighbor_pearl_ids[1]:
+                # checking if one of them is the parent
+                # this can happen only, if the yet bad level is bigger
+                if simple_pearl_list[neighbor_pearl_ids[0]]['level_of_pearl']>pearl['level_of_pearl']:
+                    pearl['parent_pearl'] = neighbor_pearl_ids[0]
+                if simple_pearl_list[neighbor_pearl_ids[1]]['level_of_pearl']>pearl['level_of_pearl']:
+                    pearl['parent_pearl'] = neighbor_pearl_ids[1]
+
+                # finding the parent:
+                neighbor_1_parent_id = simple_pearl_list[neighbor_pearl_ids[0]]['parent_pearl']
+                neighbor_2_parent_id = simple_pearl_list[neighbor_pearl_ids[1]]['parent_pearl']
+                # if one of the neighbors is the pearl, that is the parent
+                if   neighbor_1_parent_id == 'this is the root': 
+                    pearl['parent_pearl'] = neighbor_pearl_ids[0]
+                elif neighbor_2_parent_id == 'this is the root':
+                    pearl['parent_pearl'] = neighbor_pearl_ids[1]
+                # parents can be 'unknown', if we haven't set them yet.
+                else:
+                    if neighbor_1_parent_id != 'unknown':
+                        if neighbor_2_parent_id != 'unknown':
+                            # in theory this 'if' is unnecessary, the pearls are in such order, that one of the neighbors
+                            if neighbor_1_parent_id == neighbor_2_parent_id:
+                                print(simple_pearl_list[neighbor_1_parent_id]['level_of_pearl'])
+                                # in theory this if is unnecessary, if the two neighbors are different, either one of them is 
+                                # the parent of all 3 of them have the same parent
+                                if simple_pearl_list[neighbor_1_parent_id]['level_of_pearl']>pearl['level_of_pearl']:
+                                    pearl['parent_pearl'] = neighbor_1_parent_id
+                            else:
+                                print('Unexpected behaviour')
+                        
+                        else:   #neighbor_2_parent is unknown
+                            if simple_pearl_list[neighbor_1_parent_id]['level_of_pearl']>pearl['level_of_pearl']:                                        
+                                pearl['parent_pearl'] = neighbor_1_parent_id
+                    else: print('Unexpected behaviour')
+    return simple_pearl_list
 
 # find the cutting nodes
 def cutting_nodes(G):
@@ -946,7 +1041,7 @@ def separate_by_cutting_nodes(G):
     '''
     root = G.graph['root']
     cuts = list(cutting_nodes(G))
-    graph_pieces = G.copy()
+    
 
     list_of_2_node_conn_comps = []
 
@@ -956,6 +1051,7 @@ def separate_by_cutting_nodes(G):
 
     #if we are not, recursion by one of the cutting nodes
     curr_cutting_node = cuts[0]
+    graph_pieces = G.copy()
     graph_pieces.remove_node(curr_cutting_node)
     comps = nx.connected_components(graph_pieces)
 
@@ -963,7 +1059,7 @@ def separate_by_cutting_nodes(G):
     for comp in comps:
         smaller_graph = G.subgraph([curr_cutting_node, *comp]).copy()
         #if root is not in the smaller comp
-        if G.graph['root'] not in comp:
+        if G.graph['root'] not in comp:        # not comp but smaller graph
             lista = list(comp)
             if type(G.graph['root']) == 'str':
                 lista.sort(key = lambda node: len(nx.shortest_path(G, str(source=G.graph['root']), target=str(node))))
@@ -1025,7 +1121,6 @@ def create_big_2_conn_from_Ion():
     if 'root' not in trimmed_graph.graph.keys():                       #if not specified earlier, choose a random root
         trimmed_graph.graph['root'] = random.choice(list(trimmed_graph.nodes))
 
-    print(trimmed_graph.graph['root'])
 
 
     #dissect into 2-connected components
@@ -1105,6 +1200,40 @@ def create_2_conn_example_graph():
 
 ## PACKAGE
 
-#PACKAGE[]
+# package_info['bouncing'],
+# package_info['pearl_level'] 
+# package_info['num_steps']
 
 ## ROUTING TABLE
+
+# A routing table in given node v looks like a multi levelled dict, keys are possible header configs, 
+# items are the routing permutation on the out-edges
+
+# R['incoming_edge']['in_pearl'] = 
+# R['incoming_edge']['traversing'] = 
+
+# Now we write it onto the nodes of the graph, so we don't need the R['v']['incoming_edge']['traversing'] notation.
+
+
+
+
+
+##### GARBAGE:
+
+def cactus_from_pearls(simple_pearl_list, graph):
+    cactus = nx.MultiGraph()
+    for pearl in reversed(simple_pearl_list):
+        cactus.add_node(pearl['id'])
+        if pearl['neighbor_nodes'] != 'this is the root':
+            neighbor_pearl_ids = []
+            for neighbor in pearl['neighbor_nodes']:
+                neighbor_pearl_ids.append(graph.nodes[neighbor]['pearl_id'])
+                
+            if neighbor_pearl_ids[0]!=neighbor_pearl_ids[1]:
+            # creating the cactus
+                if not cactus.has_edge(neighbor_pearl_ids[0], pearl['id']):
+                    cactus.add_edge(neighbor_pearl_ids[0], pearl['id'])
+                if not cactus.has_edge(neighbor_pearl_ids[1], pearl['id']):
+                    cactus.add_edge(neighbor_pearl_ids[1], pearl['id'])
+
+    return cactus
