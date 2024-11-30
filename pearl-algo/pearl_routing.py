@@ -548,12 +548,13 @@ def route_a_multigraph(multigraph):
 # routes a 2-connected graph
 def route_a_2_conn_multigraph(multigraph):
     '''
-    Partition the edges of a 
+    Partition the edges of a 2 connected multigraph into pearls, then route each pearl
     '''
     # for testing the code working:
     # list the edges to check if the are routed. 
 
     # partition the edges of multigraph into pearls
+    current_pearl_level, num_pearls, multi_graph, list_of_all_pearls = partition_2_conn_into_pearls(multi_graph)
 
     # starting from backwards, route the pearls backwards
       # route the pearl for basic getting out
@@ -566,28 +567,69 @@ def route_a_2_conn_multigraph(multigraph):
 
 #TODO
 #routing of closed_pearls   #rout_3_conn_graph() + route_a_pearl_for_traversing
-def route_a_pearl(P):
+def route_a_pearl(P, multigraph, multidigraph):
     '''
     Given a pearl, with boundaries, etc, it generates a arborescense based routing with rout_3_conn_graph(), and 
     route_a_pearl_for_traversing
+    INPUT: 
+    P - pearl dictionary
+    multigraph - nx.MultiGraph
+    multidigraph - nx.MultiDiGraph, to write the routing on, multigraph.to_directed()
     '''
+    print('Here we start to route the pearl')
+    #this is what we are working with
+    pearl_graph = multigraph.subgraph(P['nodes']).copy()
+
     # add boundary_1, boundary_2 as an edge
+    boundary_1 = P['boundary'][0]
+    boundary_2 = P['boundary'][1]
+    pearl_graph.add_edge(boundary_1, boundary_2)
+    # If we use a specific key, the GreedyArborescences crashes
+    edge_data = pearl_graph[boundary_1][boundary_2]  
+    keys = list(edge_data.keys())  
+    boundary_edge_key = keys[-1] 
+    P['boundary_edge_key'] = boundary_edge_key 
+
+    #we need to get to one of the edges #here we have a freedom of choice
+    pearl_graph.graph['root'] = boundary_1
+    pearl_digraph = pearl_graph.to_directed() 
 
     # route the pearl with rout_3_conn_graph
+    rout_3_conn_graph(P, pearl_graph, pearl_digraph, (boundary_1, boundary_2, boundary_edge_key) )
 
     # route the pearl for traversing 
+    # for cut edges to be in the graph, pearl_graph is not enough
+    route_a_pearl_for_traversing(P, multidigraph, multigraph)
+
+    '''
+    # check the result
+    print('root', pearl_digraph.graph['root']) 
+    for node in pearl_digraph.nodes:
+        print('node ', node)
+        if node is not pearl_digraph.graph['root']:
+            print(pearl_digraph.nodes[node]['R'])
+    '''
+    
 
 #TODO: bouncing bit!
 #routing of 3-connected graphs via arborescences
-def rout_3_conn_graph(multigraph, multidigraph, edge):
+def rout_3_conn_graph(P, multigraph, multidigraph, edge):
     '''
     given a 3 connected graph, that has an extra attribute, g.graph['root'] and a specific 'edge', make a 2 resilient routing based on
     circular arborescences, where the first arborescence contains 'edge'
     '''
+    # recreate the pearl graph
+    pearl_graph = multigraph.subgraph(P['nodes']).copy()
+    boundary_1 = P['boundary'][0]
+    pearl_graph.graph['root'] = boundary_1
+    pearl_digraph = pearl_graph.to_directed()
+
+
 
     #find the arborescences
     unordered_arborescence_list = GreedyArborescenceDecomposition(multidigraph)
     arborescence_list = []
+    # pick the arb containing the boundary edge
     last_arb = None
     for arb in unordered_arborescence_list:
         if edge in arb.edges(keys=True):              #find the arb, that contains the edge that 
@@ -603,6 +645,7 @@ def rout_3_conn_graph(multigraph, multidigraph, edge):
             R = {}
             # if you started under this pearl, you need to get out of here
             R_getting_out = {}
+            R_bouncing    = {}
             for edge in multidigraph.in_edges(nbunch= [node], keys=True):
                 # reindexing the arborescences
                 if edge in arborescence_list[0].edges:
@@ -626,6 +669,7 @@ def rout_3_conn_graph(multigraph, multidigraph, edge):
                     out_edge_2 = list(next_tree.out_edges([node], keys = True))[0]
                     out_edge_3 = list(prev_tree.out_edges([node], keys = True))[0]
                     R_getting_out[edge] = [out_edge_1, out_edge_2, out_edge_3]
+                    #R_bouncing = #TODO
             #if the package starts at 'node'
             arb_0_edges_list = list(arborescence_list[0].edges)
             arb_1_edges_list = list(arborescence_list[1].edges)
@@ -638,15 +682,12 @@ def rout_3_conn_graph(multigraph, multidigraph, edge):
             #saving the local dict to the big dict
             R['getting_out'] = R_getting_out
             multidigraph.nodes[node]['R'] = R
-        
-    for node in multidigraph.nodes:
-        if node is not multidigraph.graph['root']:
-            print(multidigraph.nodes[node]['R'])
 
+    return None 
 
 #TODO: bouncing bit! (here we actually need to think about it)
 #routing of parallel routes in a graph
-def route_a_pearl_for_traversing(P, multidigraph, multigraph):
+def route_a_pearl_for_traversing(P, multidigraph, pearl_graph):
     '''
     find 2 (or more) edge-disjoint paths between the boundaries of the pearl, then do the circular routing for 
     parallel paths
@@ -663,7 +704,12 @@ def route_a_pearl_for_traversing(P, multidigraph, multigraph):
         boundary_2 = P['boundary'][1]
 
     #create the pearl subgraph
-    pearl_graph = multigraph.subgraph(P['nodes'])
+    pearl_id = P['id']
+    if (boundary_1, boundary_2, f'boundary_edge_for_pearl_{pearl_id}') in pearl_graph.edges:
+        print('Ki kellett venni')
+        boundary_edge_key = P['boundary_edge_key']
+        pearl_graph.remove_edge(boundary_1, boundary_2, key = boundary_edge_key)
+
 
     # find 2 arc-disjointed pathes
     paths = list(nx.edge_disjoint_paths(pearl_graph, boundary_1, boundary_2, cutoff=2))
@@ -729,6 +775,8 @@ def route_a_pearl_for_traversing(P, multidigraph, multigraph):
     R2_traversing_dict[p2_in_edge_2] = [p1_out_edge_2, out_cut_edge_2, p2_out_edge_2]
     R2_traversing_dict[p1_in_edge_2] = [out_cut_edge_2, p2_out_edge_2, p1_out_edge_2]
     R_2['traversing'] = R2_traversing_dict
+
+    #TODO is one of the cut_edges has failed, need to switch to bouncing mode here.
 
     # saving the dicts
     #if we already stored data previously, just add some new keys
@@ -843,19 +891,17 @@ def compute_path_under_2_fails():
 ##########################################################################################################
 ##########################################################################################################
 
-def main_routing(args):
-    multigraph = create_simple_2_pearl_multigraph()
-    current_pearl_level, num_pearls, multi_graph, list_of_all_pearls = partition_2_conn_into_pearls(multigraph)
+def main(args):
+    ex_multigraph = create_simple_2_pearl_multigraph()
+    current_pearl_level, num_pearls, multi_graph, list_of_all_pearls = partition_2_conn_into_pearls(ex_multigraph)
 
-    multidigraph = multigraph.to_directed()
-    print(list_of_all_pearls[0][0])
-    #want to test this
-    #route_a_pearl_for_traversing(list_of_all_pearls[0][0], multidigraph, multigraph)
-    graph = nx.MultiDiGraph(nx.complete_graph(n=4))
-    graph.graph['k'] = 3
-    graph.graph['root'] = 0
-    multidigraph = graph.to_directed()
-    rout_3_conn_graph(graph, multidigraph, (0,1,0))
+    ex_multidigraph = ex_multigraph.to_directed()
+    example_pearl = list_of_all_pearls[0][0]
+    print(ex_multigraph.subgraph(example_pearl['nodes']).edges)
+    print('Start of the pearl routing')
+    route_a_pearl(example_pearl, ex_multigraph, ex_multidigraph)
+
+
 
     '''
     print('Result')
@@ -864,8 +910,8 @@ def main_routing(args):
     '''
         
 #iterate through topology zoo and write node num, edge num, pearl num and pearl depth
-#def pearl_depth_experiment():
-def main(args):
+def pearl_depth_experiment():
+#def main(args):
     graph_data, subdivision_data = check_everything()
     graph_data.to_csv(path_or_buf='/mnt/d/Egyetem/Routing Cikk/fast-failover/pearl-algo/topology_zoo_statistics_with_pearl_sizes.csv')
     subdivision_data.to_csv(path_or_buf='/mnt/d/Egyetem/Routing Cikk/fast-failover/pearl-algo/topology_zoo_statistics_subdivision_stats.csv')
