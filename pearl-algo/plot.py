@@ -111,7 +111,7 @@ def draw_multigraph_with_labels(graph, output_tex_file = None):
     pos = nx.spring_layout(graph)
     
     # Draw nodes and labels
-    nx.draw_networkx_nodes(graph, pos, node_color=node_colors, node_size=300)
+    nx.draw_networkx_nodes(graph, pos, node_color=node_colors, node_size=500)
     nx.draw_networkx_labels(graph, pos, font_size=10, font_color='white')
 
     # Draw parallel edges manually

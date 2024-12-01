@@ -38,7 +38,6 @@ def find_pearls(multi_graph):
         if tree[i][j]['weight'] == 2:
             important_two_cuts.append(cut)
 
-    #print('important two cuts', important_two_cuts)
     #remove 2-cuts from gomory-hu tree
     tree.remove_edges_from(important_two_cuts)
     #these components are the pearls
@@ -70,7 +69,6 @@ def find_pearls(multi_graph):
             if is_3_connected(pearl):
                 pearls.append(comp)
 
-    #print('pearls ', list(pearls))
     return pearls
 
 
@@ -188,8 +186,7 @@ def is_3_connected(multi_graph):
     """
     We check the if the smallest cut is smaller than 3.
     """
-    if len(multi_graph.nodes)<=1: 
-        #print('ezt még átnézni')
+    if len(multi_graph.nodes)<=1:
         return True
 
     simple_graph = nx.Graph(multi_graph)               #gomory-hu tree is not implemented for MultiGraphs
@@ -271,12 +268,10 @@ def measure_everything():
     return deepest, depth
 
 def main(args):
-    Graph, is_list = read_in_graph(file_path)
-    #print(measure_graph(Graph, verbose=False))
-    print(measure_everything())
+    Graph = nx.MultiGraph()
+    print(Graph)
+    print(is_3_connected(Graph))
 
-    #graph = nx.MultiGraph(nx.cycle_graph(5))
-    #print(contract_paths(graph).edges)
 
 
 

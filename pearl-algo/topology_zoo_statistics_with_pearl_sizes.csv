@@ -27,10 +27,10 @@
 25,23,43,1,Belnet2004.graphml,1,5.0,5.0,5.0
 26,23,44,1,Belnet2005.graphml,1,5.0,5.0,5.0
 27,23,44,1,Belnet2006.graphml,1,5.0,5.0,5.0
-28,21,31,4,Belnet2007.graphml,5,2.0,2.0,2.0
-29,21,31,4,Belnet2008.graphml,5,2.0,2.0,2.0
-30,21,31,4,Belnet2009.graphml,5,2.0,2.0,2.0
-31,22,32,4,Belnet2010.graphml,5,2.0,2.0,2.0
+28,21,31,3,Belnet2007.graphml,5,2.0,2.0,2.0
+29,21,31,3,Belnet2008.graphml,5,2.0,2.0,2.0
+30,21,31,3,Belnet2009.graphml,5,2.0,2.0,2.0
+31,22,32,3,Belnet2010.graphml,5,2.0,2.0,2.0
 32,53,65,1,BeyondTheNetwork.graphml,1,14.0,14.0,14.0
 33,33,48,2,Bics.graphml,2,8.5,2.0,15.0
 34,29,33,2,Biznet.graphml,4,1.75,1.0,2.0
@@ -63,7 +63,7 @@
 61,30,29,1,Cynet.graphml,0,0.0,0.0,0.0
 62,28,31,3,Darkstrand.graphml,3,2.0,2.0,2.0
 63,6,11,1,Dataxchange.graphml,1,5.0,5.0,5.0
-64,113,183,6,Deltacom.graphml,6,10.0,1.0,52.0
+64,113,183,5,Deltacom.graphml,6,10.0,1.0,52.0
 65,58,87,1,Dfn.graphml,1,20.0,20.0,20.0
 66,31,38,4,Digex.graphml,4,2.75,2.0,4.0
 67,19,29,1,Easynet.graphml,2,4.0,3.0,5.0

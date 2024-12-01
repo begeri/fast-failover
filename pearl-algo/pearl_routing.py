@@ -111,6 +111,12 @@ def contract_paths_keep_root(G):
         if G.graph['root'] in nodes_to_remove:
             nodes_to_remove.remove(G.graph['root'])
             
+            #neighbors = list(G.neighbors(G.graph['root']))
+            #for neighbor in neighbors:
+            #    G.add_edge(neighbor, G.graph['root'])
+
+
+            
     # remove the ones we want to remove
     for v in nodes_to_remove:
         neighbors = list(G.neighbors(v))
@@ -261,22 +267,14 @@ def partition_2_conn_into_pearls(multi_graph):
     # from Gomory-Hu type parents to cactus type parents
     fixing_pearl_parent_pointers(simple_pearl_list, multi_graph)
 
-    print('Debugging')
-    for pearl in simple_pearl_list:
-        print('_________________________________________________')
-        print(pearl)
-    
-    print('Graph data')
-    print('root = ', multi_graph.graph['root'])
+
     
     # at this point we have a pearl height, and it is only the same as pearl depth for the root pearl and the max length
     # pathes to leafs
     #if the parents are good, this gonna solve the problem of pearl levels
     for pearl in reversed(simple_pearl_list):
         if pearl['parent_pearl'] != 'this is the root':
-            print('pearl_id', pearl['id'])
             parent_pearl_id = pearl['parent_pearl']
-            print('parent pearl id = ', parent_pearl_id)
             pearl['level_of_pearl'] = simple_pearl_list[parent_pearl_id]['level_of_pearl']-1
 
 
@@ -306,6 +304,7 @@ def pearl_depth_of_graph(simple_graph, verbose = False):
     if 'root' not in trimmed_graph.graph.keys():                       #if not specified earlier, choose a random root
         trimmed_graph.graph['root'] = random.choice(list(trimmed_graph.nodes))
 
+    
     
     
     if verbose:
@@ -866,7 +865,7 @@ def main(args):
 
 def check_a_single_graph():
 #def main(args):
-    pearl_depth, node_num, edge_num, num_pearls, avg_pearl_size, min_pearl_size, max_pearl_size, is_subdivision = check_a_graph('/mnt/d/Egyetem/Routing Cikk/SyPeR/topology-zoo-original/Ion.graphml')  
+    pearl_depth, node_num, edge_num, num_pearls, avg_pearl_size, min_pearl_size, max_pearl_size, is_subdivision = check_a_graph('/mnt/d/Egyetem/Routing Cikk/SyPeR/topology-zoo-original/Colt.graphml')  
     print(pearl_depth, node_num, edge_num, num_pearls)
 
 
@@ -961,6 +960,8 @@ def fixing_pearl_parent_pointers(simple_pearl_list, graph):
     OUTPUT:
     simple_pearl_list - updated pearl['parent_pearl'] datas
     '''
+
+    
     #setting the parents well
     for pearl in reversed(simple_pearl_list):
         if pearl['parent_pearl']!='this is the root':
@@ -972,6 +973,7 @@ def fixing_pearl_parent_pointers(simple_pearl_list, graph):
             neighbor_pearl_ids = []
             for neighbor in pearl['neighbor_nodes']:
                 neighbor_pearl_ids.append(graph.nodes[neighbor]['pearl_id'])
+            # f there is only one neighbour, that is gonna be the parent pearl
             if len(neighbor_pearl_ids)==1:
                 pearl['parent_pearl'] = neighbor_pearl_ids[0]
             elif neighbor_pearl_ids[0]==neighbor_pearl_ids[1]:    
@@ -980,38 +982,41 @@ def fixing_pearl_parent_pointers(simple_pearl_list, graph):
             # if the two neighbors are not the same
             elif neighbor_pearl_ids[0]!=neighbor_pearl_ids[1]:
                 # checking if one of them is the parent
-                # this can happen only, if the yet bad level is bigger
+                # this can happen only, if the yet bad level (pearl height) is bigger
                 if simple_pearl_list[neighbor_pearl_ids[0]]['level_of_pearl']>pearl['level_of_pearl']:
                     pearl['parent_pearl'] = neighbor_pearl_ids[0]
-                if simple_pearl_list[neighbor_pearl_ids[1]]['level_of_pearl']>pearl['level_of_pearl']:
+                elif simple_pearl_list[neighbor_pearl_ids[1]]['level_of_pearl']>pearl['level_of_pearl']:
                     pearl['parent_pearl'] = neighbor_pearl_ids[1]
+                else:   
+                    # finding the parent:
+                    neighbor_1_parent_id = simple_pearl_list[neighbor_pearl_ids[0]]['parent_pearl']
+                    neighbor_2_parent_id = simple_pearl_list[neighbor_pearl_ids[1]]['parent_pearl']
+                    # if one of the neighbors is the pearl, that is the parent
+                    if   neighbor_1_parent_id == 'this is the root': 
+                        pearl['parent_pearl'] = neighbor_pearl_ids[0]
+                    elif neighbor_2_parent_id == 'this is the root':
+                        pearl['parent_pearl'] = neighbor_pearl_ids[1]
+                    # parents can be 'unknown', if we haven't set them yet.
+                    else:
+                        if neighbor_1_parent_id != 'unknown':
+                            if neighbor_2_parent_id != 'unknown':
+                                # in theory this 'if' is unnecessary, the pearls are in such order, that one of the neighbors
+                                if neighbor_1_parent_id == neighbor_2_parent_id:
+                                    print(simple_pearl_list[neighbor_1_parent_id]['level_of_pearl'])
+                                    # in theory this if is unnecessary, if the two neighbors are different, either one of them is 
+                                    # the parent of all 3 of them have the same parent
+                                    if simple_pearl_list[neighbor_1_parent_id]['level_of_pearl']>pearl['level_of_pearl']:
+                                        pearl['parent_pearl'] = neighbor_1_parent_id
+                                else: 
+                                    print('Unexpected behaviour_1')
 
-                # finding the parent:
-                neighbor_1_parent_id = simple_pearl_list[neighbor_pearl_ids[0]]['parent_pearl']
-                neighbor_2_parent_id = simple_pearl_list[neighbor_pearl_ids[1]]['parent_pearl']
-                # if one of the neighbors is the pearl, that is the parent
-                if   neighbor_1_parent_id == 'this is the root': 
-                    pearl['parent_pearl'] = neighbor_pearl_ids[0]
-                elif neighbor_2_parent_id == 'this is the root':
-                    pearl['parent_pearl'] = neighbor_pearl_ids[1]
-                # parents can be 'unknown', if we haven't set them yet.
-                else:
-                    if neighbor_1_parent_id != 'unknown':
-                        if neighbor_2_parent_id != 'unknown':
-                            # in theory this 'if' is unnecessary, the pearls are in such order, that one of the neighbors
-                            if neighbor_1_parent_id == neighbor_2_parent_id:
-                                print(simple_pearl_list[neighbor_1_parent_id]['level_of_pearl'])
-                                # in theory this if is unnecessary, if the two neighbors are different, either one of them is 
-                                # the parent of all 3 of them have the same parent
-                                if simple_pearl_list[neighbor_1_parent_id]['level_of_pearl']>pearl['level_of_pearl']:
+                            
+                            else:   #neighbor_2_parent is unknown
+                                if simple_pearl_list[neighbor_1_parent_id]['level_of_pearl']>pearl['level_of_pearl']:                                        
                                     pearl['parent_pearl'] = neighbor_1_parent_id
-                            else:
-                                print('Unexpected behaviour')
-                        
-                        else:   #neighbor_2_parent is unknown
-                            if simple_pearl_list[neighbor_1_parent_id]['level_of_pearl']>pearl['level_of_pearl']:                                        
-                                pearl['parent_pearl'] = neighbor_1_parent_id
-                    else: print('Unexpected behaviour')
+                        else: 
+                            print('Unexpected behaviour_2')
+
     return simple_pearl_list
 
 # find the cutting nodes
