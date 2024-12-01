@@ -125,7 +125,7 @@ def contract_paths_keep_root(G):
         if len(neighbors)==2:
             G.add_edge(neighbors[0], neighbors[1])
         # preserve connectivity 
-        else: G.add_edge(neighbors[0], neighbors[0])
+        #else: G.add_edge(neighbors[0], neighbors[0])
 
     return G
 

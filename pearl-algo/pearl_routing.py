@@ -127,7 +127,10 @@ def pearl_depth_of_graph(simple_graph, verbose = False):
 
     #discard degree 2 nodes, so found pearls are not littered by them
     trimmed_graph = OriginalGraph.copy()
+    print(trimmed_graph.edges)
     trimmed_graph = contract_paths_keep_root(trimmed_graph)
+    if len(list(trimmed_graph.nodes)) <1:    # if every node was less then degree 2, then we are a circle or a path or sg else not interesting
+        return 1, 0, [], False
 
     #for consistency lets assume, that the root is a degree 3 node:
     if 'root' not in trimmed_graph.graph.keys():                       #if not specified earlier, choose a random root
@@ -698,11 +701,15 @@ def route_degree_2_node_outside_of_pearl(multidigraph, node):
 ##########################################################################################################
 
 # running tests of package sending
-#def package_send():
-def main(args):
+def package_send():
+#def main(args):
     graph = nx.read_graphml('/mnt/d/Egyetem/Routing Cikk/fast-failover/pearl-algo/graph_sets/example_graphs/biggest_pearl.graphml')
     graph = contract_paths_keep_root(graph)
-    print(is_3_connected(graph))
+    for node in graph.nodes:
+        if graph.degree(node)<3:
+            print('Small degree node')
+            print(node, graph.degree(node))
+    
     graph.graph['k'] = 3
     digraph = graph.to_directed()
 
@@ -749,8 +756,8 @@ def routing_tests():
     route_a_pearl(example_pearl, ex_multigraph, ex_multidigraph)
         
 #iterate through topology zoo and data to .csv files
-#def main(args):
-def pearl_depth_experiment():
+def main(args):
+#def pearl_depth_experiment():
 
     graph_data, subdivision_data = check_everything()
     graph_data.to_csv(path_or_buf='/mnt/d/Egyetem/Routing Cikk/fast-failover/pearl-algo/topology_zoo_statistics_with_pearl_sizes.csv')
