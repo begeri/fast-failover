@@ -20,6 +20,8 @@ import random
 import networkx as nx
 import pandas as pd
 
+import time
+
 random.seed(42)
 
 
@@ -41,6 +43,7 @@ def partition_2_conn_into_pearls(multi_graph):
     remaining_graph = multi_graph.copy()
     current_pearl_level =  1
     newest_pearl_index  = -1
+
     while is_3_connected(remaining_graph) == False:
 
         current_level_pearls = leaf_pearls(remaining_graph, level=current_pearl_level)
@@ -56,8 +59,10 @@ def partition_2_conn_into_pearls(multi_graph):
                 pearl['id'] = newest_pearl_index
                 for node in pearl['nodes']:
                     multi_graph.nodes[node]['pearl_id'] = pearl['id']
+                 
+
                 #remove the pearl
-                remaining_graph = totally_contract_pearl(remaining_graph, pearl)
+                remaining_graph, pearl = totally_contract_pearl(remaining_graph, pearl)
                     
         if root_pearl != None: current_level_pearls.remove(root_pearl)
  
@@ -77,8 +82,10 @@ def partition_2_conn_into_pearls(multi_graph):
     for node in root_dict['nodes']:
         multi_graph.nodes[node]['pearl_id'] = root_dict['id']
     root_dict['level_of_pearl'] = current_pearl_level
+    root_dict['graph'] = remaining_graph 
 
     #irrelevant stuff at the root
+    root_dict['substitute_edge'] = 'this is the root'
     root_dict['boundary'] = 'this is the root'
     root_dict['cut_edges'] = 'this is the root'
     root_dict['neighbor_nodes'] = 'this is the root'
@@ -105,9 +112,11 @@ def partition_2_conn_into_pearls(multi_graph):
         if pearl['parent_pearl'] != 'this is the root':
             parent_pearl_id = pearl['parent_pearl']
             pearl['level_of_pearl'] = simple_pearl_list[parent_pearl_id]['level_of_pearl']-1
-
+    
+    
 
     num_pearls = newest_pearl_index+1
+
     return current_pearl_level, num_pearls, multi_graph, list_of_all_pearls
 
 #measure the pearl depth of a graph        
@@ -127,7 +136,6 @@ def pearl_depth_of_graph(simple_graph, verbose = False):
 
     #discard degree 2 nodes, so found pearls are not littered by them
     trimmed_graph = OriginalGraph.copy()
-    print(trimmed_graph.edges)
     trimmed_graph = contract_paths_keep_root(trimmed_graph)
     if len(list(trimmed_graph.nodes)) <1:    # if every node was less then degree 2, then we are a circle or a path or sg else not interesting
         return 1, 0, [], False
@@ -225,6 +233,8 @@ def check_a_graph(file_path, verbose = False):
     #pearl relatd infos
     G, is_list = read_in_graph(file_path)
     pearl_depth, num_pearls, pearl_list, is_subdivision = pearl_depth_of_graph(G, verbose=False)
+    
+
 
     # compute the average pearl size, min size, max size
     pearl_size_list = []
@@ -271,11 +281,15 @@ def check_everything():
     for name in fnames:
         print(name) 
         end_of_name = name.split(sep = '/')[-1]
+        # measuring the time:
+        start = time.time()
         #getting the data
         this_depth, node_num, edge_num, num_pearls, avg_pearl_size, min_pearl_size, max_pearl_size, is_subdivision = check_a_graph(name)
-        print(this_depth, node_num, edge_num, num_pearls, avg_pearl_size, min_pearl_size, max_pearl_size, is_subdivision)
+        end = time.time()
+        elapsed_time = end - start
+        print(this_depth, node_num, edge_num, num_pearls, avg_pearl_size, min_pearl_size, max_pearl_size, is_subdivision, elapsed_time)
         #converting the data to dataframe
-        this_data = pd.DataFrame( index=[index_of_graph], data =  {'NUM NODES': node_num, 'NUM EDGES': edge_num, 'PEARL DEPTH': this_depth, 'GRAPH NAME':end_of_name, 'NUM PEARLS': num_pearls, 'AVG PEARL SIZE': avg_pearl_size, 'MIN PEARL SIZE': min_pearl_size, 'MAX PEARL SIZE': max_pearl_size})
+        this_data = pd.DataFrame( index=[index_of_graph], data =  {'NUM NODES': node_num, 'NUM EDGES': edge_num, 'PEARL DEPTH': this_depth, 'GRAPH NAME':end_of_name, 'NUM PEARLS': num_pearls, 'AVG PEARL SIZE': avg_pearl_size, 'MIN PEARL SIZE': min_pearl_size, 'MAX PEARL SIZE': max_pearl_size, 'TIME': elapsed_time})
         graph_data = pd.concat([graph_data, this_data], axis=0)
         if this_depth>=depth:
             deepest = name
@@ -504,6 +518,13 @@ def route_3_conn_graph(multidigraph, edge):
     for arb in unordered_arborescence_list:
         arborescence_list.append(arb)
     arborescence_list.append(last_arb)
+
+    for arb in arborescence_list:
+        print(arb)
+
+    print('Debugging, check if each node has out-edges in every tree')
+    for node in multidigraph.nodes():
+        pass
     
 
     for node in multidigraph.nodes:
@@ -523,27 +544,26 @@ def route_3_conn_graph(multidigraph, edge):
                 else: 
                     print('edge not in any tree', edge)
                     tree_index = None
-
+                
+                #we only need to set routing table, if it is gonna be used
                 if tree_index is not None:
+                    #reordering the trees based on in_edge-es index
                     curr_tree = arborescence_list[tree_index]
                     next_tree = arborescence_list[(tree_index+1)%3]
                     prev_tree = arborescence_list[(tree_index+2)%3]
                     if len(list(curr_tree.out_edges([node], keys = True))) != 1:
                         print('Tree ', tree_index, ' has more than one out edge at node ', node, '!')
-
+                    #reindexing the arborescences done
+                    #listing the 3 out-edges
                     out_edge_1 = list(curr_tree.out_edges([node], keys = True))[0]
                     out_edge_2 = list(next_tree.out_edges([node], keys = True))[0]
                     out_edge_3 = list(prev_tree.out_edges([node], keys = True))[0]
                     R_basic_forwarding[edge] = [out_edge_1, out_edge_2, out_edge_3]
-                    #R_bouncing = #TODO
+                #R_bouncing = #TODO
             #if the package starts at 'node'
             arb_0_edges_list = list(arborescence_list[0].edges)
             arb_1_edges_list = list(arborescence_list[1].edges)
             arb_2_edges_list = list(arborescence_list[2].edges)
-            if node == '15':
-                print(multidigraph.graph['root'])
-                print('Debugging')
-                print([edge for edge in arb_2_edges_list if (edge[0]=='15')])
 
             out_edge_in_arb_0 = [edge for edge in arb_0_edges_list if (edge[0]==node)][0]
             out_edge_in_arb_1 = [edge for edge in arb_1_edges_list if (edge[0]==node)][0]
@@ -704,7 +724,9 @@ def route_degree_2_node_outside_of_pearl(multidigraph, node):
 def package_send():
 #def main(args):
     graph = nx.read_graphml('/mnt/d/Egyetem/Routing Cikk/fast-failover/pearl-algo/graph_sets/example_graphs/biggest_pearl.graphml')
-    graph = contract_paths_keep_root(graph)
+    #graph = contract_paths_keep_root(graph)
+    print(graph)
+    print(is_3_connected(graph))
     for node in graph.nodes:
         if graph.degree(node)<3:
             print('Small degree node')
@@ -810,10 +832,12 @@ def pearl_decomposition_and_cactus():
 
 
 ### UTILS, that are using functions from this file 
-def max_sized_pearl_of_a_graph(filepath):
+def pearls_of_a_graph(filepath):
     '''
     Returns the maximum sized pearl as a 3 connected graph of 
     '''
+    list_of_all_pearls_graphs = []
+
     G, is_list = read_in_graph(filepath)
     OriginalGraph = nx.MultiGraph(G)
 
@@ -839,7 +863,7 @@ def max_sized_pearl_of_a_graph(filepath):
             proper_comps.append(comp)
     
     if proper_comps == []:             #if every 2 connected component is a single node, edge or circle, then it is a cactus
-        return 1, 0, [], False
+        return  'nincs semmi', 'nada'
 
 
     #measure each component
@@ -862,26 +886,17 @@ def max_sized_pearl_of_a_graph(filepath):
 
         #Check those pearls
         depth, num_pearls, graph_with_pearl_data, list_of_pearls_in_this_comp = partition_2_conn_into_pearls(graph)
-        for level in list_of_pearls_in_this_comp:
-            for pearl in level:
-                subgraph = graph.subgraph(pearl['nodes']).copy()
-                subgraph.add_edge(pearl['boundary'][0], pearl['boundary'][-1])
-                list_of_all_pearl_subgraphs.append(subgraph)
-
                     
         list_of_all_pearls.append(list_of_pearls_in_this_comp)  # list of all pearls 
     
     #finding the biggest pearl
     max_pearl_size = 0
+    max_pearl_graph = None
     max_pearl = None
-    for pearl_graph in list_of_all_pearl_subgraphs:
-        if len(list(pearl_graph.nodes))>max_pearl_size:
-            max_pearl_size = len(list(pearl_graph.nodes))
-            max_pearl  = pearl_graph
-    
 
+    
     #creating the subgraph
-    return  max_pearl
+    return  list_of_all_pearls
 
 
 
