@@ -19,6 +19,28 @@ random.seed(42)
 
 ### ARBORESCENCE UTILS
 
+#edge connectivity for multidigraphs
+def edge_connectivity_maxflow(g, u, v):
+    """
+    Computes edge connectivity between nodes u and v in a MultiDiGraph using max-flow.
+
+    INPUT:
+        g (nx.MultiDiGraph): Input multidigraph.
+        u (node): Source node.
+        v (node): Target node.
+
+    OUTPUT:
+        int: Edge connectivity between u and v.
+    """
+    flow_g = nx.DiGraph()
+    for (s, t, data) in g.edges(data=True):
+        if flow_g.has_edge(s, t):
+            flow_g[s][t]["capacity"] += 1  # Count parallel edges as capacity
+        else:
+            flow_g.add_edge(s, t, capacity=1)
+    flow_value, _ = nx.maximum_flow(flow_g, u, v)
+    return flow_value
+
 # reset the arb attribute for all edges to -1, i.e., no arborescence assigned yet
 def reset_arb_attribute(g):
     for (u, v, key) in g.edges(keys= True):
@@ -54,11 +76,13 @@ def FindTree(g, k):
     preds = sorted(g.predecessors(
         g.graph['root']), key=lambda k: random.random())
     for x in preds:
+        print('pred ', x)
         heappush(h, (0, (x, g.graph['root'])))
         if k > 1:
             continue
     while len(h) > 0:
         (d, e) = heappop(h)
+        print(d,e)
         g.remove_edge(*e)
         if e[0] not in R and (k == 1 or nx.edge_connectivity(g, e[0], g.graph['root']) >= k-1):
             dist[e[0]] = d+1
@@ -91,6 +115,8 @@ def GreedyArborescenceDecomposition(g):
         gg.remove_edges_from(T.edges(keys=True))
         k = k-1
     return get_arborescence_list(g)
+
+
 
 
 
@@ -164,12 +190,16 @@ def leaf_pearls(multi_graph, level='unknown'):
             for v in neighbors:
                 for edge in multi_graph.subgraph([x,v]).edges:
                     cut_edges.append(edge)
+
+        #save the pearl subgraph
+        pearl_subgraph = multi_graph.subgraph(dict['nodes']).copy()
+        dict['graph'] = pearl_subgraph
+        
         dict['cut_edges'] = cut_edges
         dict['neighbor_nodes'] = neighbors
         dict['level_of_pearl'] = level
         dict['parent_pearl'] = 'unknown'
         dict['id'] = 'unknown'
-        
         decorated_pearls.append(dict)
 
     return decorated_pearls
@@ -195,8 +225,7 @@ def totally_contract_pearl(multi_graph, pearl):
         pearl['substitute_edge'] = (neighbors[0],neighbors[1], key)
  
 
-
-    return multi_graph
+    return multi_graph, pearl
 
 # sets pearl parint pointers
 def fixing_pearl_parent_pointers(simple_pearl_list, graph):

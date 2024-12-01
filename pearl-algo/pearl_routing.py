@@ -152,7 +152,6 @@ def pearl_depth_of_graph(simple_graph, verbose = False):
         print(trimmed_graph.edges)
 
     #dissect into 2-connected components
-    #comps = cut_cutting_edges(trimmed_graph)
     comps = separate_by_cutting_nodes(trimmed_graph)
     #discard single nodes and single edges and circles
     proper_comps = []
@@ -222,8 +221,56 @@ def pearl_depth_of_graph(simple_graph, verbose = False):
 
     return max(depth_list), big_graph_num_pearls, list_of_all_pearls, is_subdivision
 
+def can_be_done_with_0_bits(simple_graph):
+    '''
+    a simple graph can be routed with 0 bits, 
+    iff its 2 connected components are either circles,
+    paths or 3-edge-connected components
+    '''
+    if 'root' not in simple_graph.graph.keys():                       #if not specified earlier, choose a random root
+        simple_graph.graph['root'] = random.choice(list(simple_graph.nodes))
+
+    comps = separate_by_cutting_nodes(simple_graph)
+    print('Done separating')
+    #discard single nodes and single edges and circles
+    proper_comps = []
+    for comp in comps:
+        if len(list(comp.nodes))>2 and len(list(comp.edges))>len(list(comp.nodes)):
+            proper_comps.append(comp)
+    # if everything are circles, paths or nodes, then we can do it with 0 bits
+    if proper_comps == []:
+        return True
+
+    for comp in proper_comps:
+        graph = simple_graph.subgraph(comp).copy()
+        if not is_3_connected(graph):
+            return False
+    #if every proper component is 3 connected, than we can do it
+    return True
+
+
 
 ### MEASUREMENTS
+
+def list_0_bits():
+
+    fnames = [ '/mnt/d/Egyetem/Routing Cikk/SyPeR/topology-zoo-original/'+fname for fname in os.listdir('/mnt/d/Egyetem/Routing Cikk/SyPeR/topology-zoo-original/') if fname.endswith('.graphml')] 
+    fnames = filter(lambda f: nx.edge_connectivity(nx.read_graphml(f))>0,fnames)
+
+    no_bit_data = pd.DataFrame(columns=[ 'GRAPH NAME'])
+    index_of_graph = 0
+    for name in fnames:
+        print(name) 
+        
+        end_of_name = name.split(sep = '/')[-1]
+        if end_of_name != 'Kdl.graphml':
+            G, is_list = read_in_graph(name)
+            if can_be_done_with_0_bits(G):
+                this_data = pd.DataFrame( index=[index_of_graph], data =  { 'GRAPH NAME':end_of_name, })
+                no_bit_data = pd.concat([no_bit_data, this_data], axis=0)
+    
+    no_bit_data.to_csv('/mnt/d/Egyetem/Routing Cikk/fast-failover/pearl-algo/no_bit_data.csv')
+    return None
 
 
 def check_a_graph(file_path, verbose = False):
@@ -327,6 +374,7 @@ def extract_pearl_tree(multi_graph):
 
 ### FORWARDING
 
+# choose the first available edge
 def choose_first_available(out_edge_list, failure_set):
     '''
     From a list of out going edges choose the first, that is not failed
@@ -337,8 +385,7 @@ def choose_first_available(out_edge_list, failure_set):
             out_edge = (u,v,k)
     return out_edge
         
-
-
+# given a starting node forward the package
 def send_a_package(multidigraph, starting_node, failure_set, max_step):
     '''
     Given a multidigraph properly labeled with routing tables and a starting node from that graph, 
@@ -780,10 +827,10 @@ def routing_tests():
 #iterate through topology zoo and data to .csv files
 def main(args):
 #def pearl_depth_experiment():
-
-    graph_data, subdivision_data = check_everything()
-    graph_data.to_csv(path_or_buf='/mnt/d/Egyetem/Routing Cikk/fast-failover/pearl-algo/topology_zoo_statistics_with_pearl_sizes.csv')
-    subdivision_data.to_csv(path_or_buf='/mnt/d/Egyetem/Routing Cikk/fast-failover/pearl-algo/topology_zoo_statistics_subdivision_stats.csv')
+    list_0_bits()
+    #graph_data, subdivision_data = check_everything()
+    #graph_data.to_csv(path_or_buf='/mnt/d/Egyetem/Routing Cikk/fast-failover/pearl-algo/topology_zoo_statistics_with_pearl_sizes.csv')
+    #subdivision_data.to_csv(path_or_buf='/mnt/d/Egyetem/Routing Cikk/fast-failover/pearl-algo/topology_zoo_statistics_subdivision_stats.csv')
 
 #def main(args):
 def check_a_single_graph():

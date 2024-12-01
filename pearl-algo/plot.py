@@ -11,7 +11,8 @@ from matplotlib.collections import LineCollection
 
 
 
-def plot_columns_by_index(dataframe, col1, col2, col3, col4, output_file="topology_zoo_pearl_data.tex"):
+#def plot_columns_by_index(dataframe, col1, col2, col3, col4, output_file="topology_zoo_pearl_data.tex"):
+def plot_columns_by_index(dataframe, col1, col2, col3, output_file="topology_zoo_pearl_data.tex"):
     '''
     Given a dataframe, 
     '''
@@ -23,10 +24,11 @@ def plot_columns_by_index(dataframe, col1, col2, col3, col4, output_file="topolo
     plt.scatter(sorted_df.index, sorted_df[col1], label=col1, color='b', s=5)
     plt.scatter(sorted_df.index, sorted_df[col2], label=col2, color='r', s=5)
     plt.scatter(sorted_df.index, sorted_df[col3], label=col3, color='y', s=5)
-    plt.scatter(sorted_df.index, sorted_df[col4], label=col4, color='k', s=5)
+    #plt.scatter(sorted_df.index, sorted_df[col4], label=col4, color='k', s=5)
     plt.xlabel('Index')
     plt.ylabel('Values')
-    plt.title(f'{col1}, {col2}, {col3} and {col4}')
+    #plt.title(f'{col1}, {col2}, {col3} and {col4}')
+    plt.title(f'{col1}, {col2} and {col3}')
     plt.legend()
     plt.grid()
 
@@ -35,7 +37,8 @@ def plot_columns_by_index(dataframe, col1, col2, col3, col4, output_file="topolo
 
     plt.show()
 
-def plot_columns_by_an_other_column(dataframe, col_x, col1, col2, col3, output_file="topology_zoo_pearl_data.tex"):
+#def plot_columns_by_an_other_column(dataframe, col_x, col1, col2, col3, output_file=None):
+def plot_columns_by_an_other_column(dataframe, col_x, col1, output_file=None): 
     '''
     Given a dataframe, 
     '''
@@ -45,12 +48,12 @@ def plot_columns_by_an_other_column(dataframe, col_x, col1, col2, col3, output_f
     # Plot the data
     plt.figure(figsize=(10, 6))
     plt.scatter(sorted_df[col_x], sorted_df[col1], label=col1, color='b', s=5)
-    plt.scatter(sorted_df[col_x], sorted_df[col2], label=col2, color='r', s=5)
-    plt.scatter(sorted_df[col_x], sorted_df[col3], label=col3, color='y', s=5)
+    #plt.scatter(sorted_df[col_x], sorted_df[col2], label=col2, color='r', s=5)
+    #plt.scatter(sorted_df[col_x], sorted_df[col3], label=col3, color='y', s=5)
     
     plt.xlabel('Index')
     plt.ylabel('Values')
-    plt.title(f'{col1}, {col2}, {col3} vs {col_x}')
+    plt.title(f'{col1} vs {col_x}')
     plt.legend()
     plt.grid()
 
