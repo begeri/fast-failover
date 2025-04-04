@@ -14,6 +14,8 @@ from util import contract_paths_keep_root, leaf_pearls, totally_contract_pearl
 from util import fixing_pearl_parent_pointers, separate_by_cutting_nodes
 from util import create_big_2_conn_from_Ion, create_simple_2_pearl_multigraph
 
+from outerplanar import check_for_outerplanarity
+
 from heapq import heappush, heappop
 import random
 
@@ -121,9 +123,9 @@ def partition_2_conn_into_pearls(multi_graph):
 
 #measure the pearl depth of a graph        
 def pearl_depth_of_graph(simple_graph, verbose = False):
+
     #convert to multigraph 
     OriginalGraph = nx.MultiGraph(simple_graph)
-
 
     is_subdivision = False
     list_of_all_pearls = []
@@ -138,7 +140,7 @@ def pearl_depth_of_graph(simple_graph, verbose = False):
     trimmed_graph = OriginalGraph.copy()
     trimmed_graph = contract_paths_keep_root(trimmed_graph)
     if len(list(trimmed_graph.nodes)) <1:    # if every node was less then degree 2, then we are a circle or a path or sg else not interesting
-        return 1, 0, [], False
+        return 1, 0, [], False, True
 
     #for consistency lets assume, that the root is a degree 3 node:
     if 'root' not in trimmed_graph.graph.keys():                       #if not specified earlier, choose a random root
@@ -163,7 +165,7 @@ def pearl_depth_of_graph(simple_graph, verbose = False):
     #proper_comps = [comp for comp in comps if len(comp.nodes)>2] 
     
     if proper_comps == []:             #if every 2 connected component is a single node, edge or circle, then it is a cactus
-        return 1, 0, [], False
+        return 1, 0, [], False, True
     depth_list = []
     big_graph_num_pearls = 0
 
@@ -219,7 +221,13 @@ def pearl_depth_of_graph(simple_graph, verbose = False):
     if max(depth_list)>1:
         is_subdivision = False
 
-    return max(depth_list), big_graph_num_pearls, list_of_all_pearls, is_subdivision
+    if max(depth_list) <= 1:
+        print('Check for outerplanarity')
+        is_outerplanar = check_for_outerplanarity(simple_graph)
+    else: is_outerplanar = False
+        
+
+    return max(depth_list), big_graph_num_pearls, list_of_all_pearls, is_subdivision, is_outerplanar
 
 def can_be_done_with_0_bits(simple_graph):
     '''
@@ -254,7 +262,7 @@ def can_be_done_with_0_bits(simple_graph):
 
 def list_0_bits():
 
-    fnames = [ '/mnt/d/Egyetem/Routing Cikk/SyPeR/topology-zoo-original/'+fname for fname in os.listdir('/mnt/d/Egyetem/Routing Cikk/SyPeR/topology-zoo-original/') if fname.endswith('.graphml')] 
+    fnames = [ 'graph_sets/topology-zoo-original/'+fname for fname in os.listdir('graph_sets/topology-zoo-original/') if fname.endswith('.graphml')] 
     fnames = filter(lambda f: nx.edge_connectivity(nx.read_graphml(f))>0,fnames)
 
     no_bit_data = pd.DataFrame(columns=[ 'GRAPH NAME'])
@@ -269,7 +277,7 @@ def list_0_bits():
                 this_data = pd.DataFrame( index=[index_of_graph], data =  { 'GRAPH NAME':end_of_name, })
                 no_bit_data = pd.concat([no_bit_data, this_data], axis=0)
     
-    no_bit_data.to_csv('/mnt/d/Egyetem/Routing Cikk/fast-failover/pearl-algo/no_bit_data.csv')
+    no_bit_data.to_csv('measurement_results/no_bit_data.csv')
     return None
 
 
@@ -279,7 +287,7 @@ def check_a_graph(file_path, verbose = False):
     '''
     #pearl relatd infos
     G, is_list = read_in_graph(file_path)
-    pearl_depth, num_pearls, pearl_list, is_subdivision = pearl_depth_of_graph(G, verbose=False)
+    pearl_depth, num_pearls, pearl_list, is_subdivision, is_outerplanar = pearl_depth_of_graph(G, verbose=False)
     
 
 
@@ -312,11 +320,11 @@ def check_a_graph(file_path, verbose = False):
     if verbose:
         print('node num = ', node_num, ', edge num =', edge_num, ', pearl depth = ', pearl_depth,' num pearls = ', num_pearls,', at ', file_path)
         print('average pearl size = ', avg_pearl_size, 'min = ', min_pearl_size, 'max = ', max_pearl_size)
-    return pearl_depth, node_num, edge_num, num_pearls, avg_pearl_size, min_pearl_size, max_pearl_size, is_subdivision
+    return pearl_depth, node_num, edge_num, num_pearls, avg_pearl_size, min_pearl_size, max_pearl_size, is_subdivision, is_outerplanar
 
-def check_everything():
+def check_everything(output_file = 'measurement_results/topology_zoo_general.csv'):
 
-    fnames = [ '/mnt/d/Egyetem/Routing Cikk/SyPeR/topology-zoo-original/'+fname for fname in os.listdir('/mnt/d/Egyetem/Routing Cikk/SyPeR/topology-zoo-original/') if fname.endswith('.graphml')] 
+    fnames = [ 'graph_sets/topology-zoo-original/'+fname for fname in os.listdir('graph_sets/topology-zoo-original/') if fname.endswith('.graphml')] 
     fnames = filter(lambda f: nx.edge_connectivity(nx.read_graphml(f))>0,fnames)
 
     graph_data = pd.DataFrame(columns=['NUM NODES', 'NUM EDGES', 'PEARL DEPTH', 'GRAPH NAME', 'NUM PEARLS'])
@@ -331,26 +339,40 @@ def check_everything():
         # measuring the time:
         start = time.time()
         #getting the data
-        this_depth, node_num, edge_num, num_pearls, avg_pearl_size, min_pearl_size, max_pearl_size, is_subdivision = check_a_graph(name)
+        this_depth, node_num, edge_num, num_pearls, avg_pearl_size, min_pearl_size, max_pearl_size, is_subdivision, is_outerplanar = check_a_graph(name)
         end = time.time()
         elapsed_time = end - start
-        print(this_depth, node_num, edge_num, num_pearls, avg_pearl_size, min_pearl_size, max_pearl_size, is_subdivision, elapsed_time)
+        print(this_depth, node_num, edge_num, num_pearls, avg_pearl_size, min_pearl_size, max_pearl_size, is_subdivision, elapsed_time, is_outerplanar)
         #converting the data to dataframe
-        this_data = pd.DataFrame( index=[index_of_graph], data =  {'NUM NODES': node_num, 'NUM EDGES': edge_num, 'PEARL DEPTH': this_depth, 'GRAPH NAME':end_of_name, 'NUM PEARLS': num_pearls, 'AVG PEARL SIZE': avg_pearl_size, 'MIN PEARL SIZE': min_pearl_size, 'MAX PEARL SIZE': max_pearl_size, 'TIME': elapsed_time})
+        this_data = pd.DataFrame( index=[index_of_graph], data =  {
+            'NUM NODES': node_num, 
+            'NUM EDGES': edge_num, 
+            'PEARL DEPTH': this_depth, 
+            'GRAPH NAME':end_of_name, 
+            'NUM PEARLS': num_pearls, 
+            'AVG PEARL SIZE': avg_pearl_size, 
+            'MIN PEARL SIZE': min_pearl_size, 
+            'MAX PEARL SIZE': max_pearl_size, 
+            'TIME': elapsed_time, 
+            'SUBDIVISON': is_subdivision, 
+            'OUTERPLANAR': is_outerplanar
+            })
         graph_data = pd.concat([graph_data, this_data], axis=0)
         if this_depth>=depth:
             deepest = name
             depth = this_depth 
-
+        """
         #listing the subdivision graphs
         if is_subdivision:
             subdivison_graphs_data = pd.concat([subdivison_graphs_data, this_data], axis=0)
-
+        """
         #next graph
         index_of_graph+=1
     print( deepest, depth)
 
-    return graph_data, subdivison_graphs_data
+    graph_data.to_csv(output_file)
+
+    return graph_data, #subdivison_graphs_data
 
 #given a 2 connected multigraph partitioned into pearls, creates the tree of pearls
 def extract_pearl_tree(multi_graph):
@@ -425,7 +447,6 @@ def send_a_package(multidigraph, starting_node, failure_set, max_step):
         if steps_taken>max_step: return 'Fail, maximum number of steps reached'
     return f'Success, {d} reached in {steps_taken} steps.'
         
-
 
 
 
@@ -768,8 +789,7 @@ def route_degree_2_node_outside_of_pearl(multidigraph, node):
 ##########################################################################################################
 
 # running tests of package sending
-def package_send():
-#def main(args):
+def package_send(args):
     graph = nx.read_graphml('/mnt/d/Egyetem/Routing Cikk/fast-failover/pearl-algo/graph_sets/example_graphs/biggest_pearl.graphml')
     #graph = contract_paths_keep_root(graph)
     print(graph)
@@ -806,15 +826,9 @@ def test_3_conn_package_sending():
     result = send_a_package(digraph, 3, [], 10)
     print(result)
 
-    
-    
-    
 
-
-
-
-#def main(args):
-def routing_tests():
+# runs routing on some simple example graoh
+def routing_tests(args):
     ex_multigraph = create_simple_2_pearl_multigraph()
     current_pearl_level, num_pearls, multi_graph, list_of_all_pearls = partition_2_conn_into_pearls(ex_multigraph)
 
@@ -824,22 +838,14 @@ def routing_tests():
     print('Start of the pearl routing')
     route_a_pearl(example_pearl, ex_multigraph, ex_multidigraph)
         
-#iterate through topology zoo and data to .csv files
-def main(args):
-#def pearl_depth_experiment():
-    list_0_bits()
-    #graph_data, subdivision_data = check_everything()
-    #graph_data.to_csv(path_or_buf='/mnt/d/Egyetem/Routing Cikk/fast-failover/pearl-algo/topology_zoo_statistics_with_pearl_sizes.csv')
-    #subdivision_data.to_csv(path_or_buf='/mnt/d/Egyetem/Routing Cikk/fast-failover/pearl-algo/topology_zoo_statistics_subdivision_stats.csv')
-
-#def main(args):
-def check_a_single_graph():
-    pearl_depth, node_num, edge_num, num_pearls, avg_pearl_size, min_pearl_size, max_pearl_size, is_subdivision = check_a_graph('/mnt/d/Egyetem/Routing Cikk/SyPeR/topology-zoo-original/Colt.graphml')  
+# calls and displays the results of the analizis of a single graph
+def check_a_single_graph(args):
+    pearl_depth, node_num, edge_num, num_pearls, avg_pearl_size, min_pearl_size, max_pearl_size, is_subdivision = check_a_graph('/graph_sets/topology-zoo-original/Colt.graphml')  
     print(pearl_depth, node_num, edge_num, num_pearls)
 
-#def main(args):
-def separation_tests():
-    file_path='/mnt/d/Egyetem/Routing Cikk/SyPeR/topology-zoo-original/Aarnet.graphml'
+
+def separation_tests(args):
+    file_path='graph_sets/topology-zoo-original/Aarnet.graphml'
     G, is_list = read_in_graph(file_path)
 
     Graph = nx.MultiGraph(G)
@@ -848,8 +854,8 @@ def separation_tests():
 
     print(separate_by_cutting_nodes(Graph))
 
-#def main(args):
-def pearl_decomposition_and_cactus():
+
+def pearl_decomposition_and_cactus(args):
     graph = create_big_2_conn_from_Ion()
 
     tree = extract_pearl_tree(graph)
@@ -952,11 +958,12 @@ def pearls_of_a_graph(filepath):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Process some integers.')
-    parser.add_argument('--file_path', type=str, default="/mnt/d/Egyetem/Routing Cikk/SyPeR/topology-zoo-original/HiberniaGlobal.graphml",
+    parser.add_argument('--file_path', type=str, default="graph_sets/topology-zoo-original/HiberniaGlobal.graphml",
                         help='Where is the graph')
     
     args = parser.parse_args()
-    main(args)
+
+    check_everything()
 
 
 

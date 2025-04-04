@@ -65,43 +65,6 @@ def FindTree(g, k):
 
     print(T)
     return T
-'''
-
-# compute the k^th arborescence of g greedily
-def FindTree(g, k):
-    T = nx.MultiDiGraph()
-    T.add_node(g.graph['root'])
-    R = {g.graph['root']}
-    dist = dict()
-    dist[g.graph['root']] = 0
-    # heap of all border edges in form [(edge metric, (e[0], e[1])),...]
-    h = []
-    preds = sorted(g.predecessors(
-        g.graph['root']), key=lambda k: random.random())
-    for x in preds:
-        heappush(h, (0, (x, g.graph['root'])))
-        if k > 1:
-            continue
-    while len(h) > 0:
-        (d, e) = heappop(h)
-        g.remove_edge(*e)
-        if e[0] not in R and (k == 1 or nx.edge_connectivity(g, e[0], g.graph['root']) >= k-1):
-            dist[e[0]] = d+1
-            R.add(e[0])
-            preds = sorted(g.predecessors(e[0]), key=lambda k: random.random())
-            for x in preds:
-                if x not in R:
-                    heappush(h, (d+1, (x, e[0])))
-            T.add_edge(*e)
-        else:
-            g.add_edge(*e)
-    if len(R) < len(g.nodes()):
-        print(
-            "Couldn't find next edge for tree with g.graph['root'], ", k, len(R))
-        sys.stdout.flush()
-    return T
-'''
-
 
 # associate a greedy arborescence decomposition with g
 def GreedyArborescenceDecomposition(g):
